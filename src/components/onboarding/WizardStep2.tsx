@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Plus, Trash2, Zap, Truck, UserCheck } from "lucide-react";
+import { Plus, Trash2, Zap, Truck } from "lucide-react";
 
 export interface FleetRow {
   plateNumber: string;

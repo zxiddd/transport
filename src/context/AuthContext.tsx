@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           setCompanyProfile(JSON.parse(localData));
           return;
-        } catch (e) {
+        } catch {
           // ignore error
         }
       }

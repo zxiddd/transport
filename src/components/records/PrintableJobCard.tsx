@@ -236,7 +236,7 @@ export function PrintableJobCard({ jobCard, onClose }: PrintableJobCardProps) {
               <div className="border-t border-dashed border-[#86868B] pt-2 text-center text-[#86868B]">
                 Driver Handover Acknowledgment
                 <p className="text-[10px] text-[#86868B] mt-0.5">
-                  "I confirm receipt of the listed parts"
+                  &quot;I confirm receipt of the listed parts&quot;
                 </p>
               </div>
             </div>

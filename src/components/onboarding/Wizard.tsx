@@ -7,7 +7,6 @@ import { useAuth } from "@/context/AuthContext";
 import { WizardStep1, Step1Data } from "./WizardStep1";
 import { WizardStep2, FleetRow } from "./WizardStep2";
 import { WizardStep3, PartSeedItem, INITIAL_PARTS } from "./WizardStep3";
-import { Truck, ShieldCheck, Building2 } from "lucide-react";
 
 interface WizardProps {
   onOnboardingComplete: () => void;

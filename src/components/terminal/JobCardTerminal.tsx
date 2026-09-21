@@ -25,7 +25,6 @@ import {
   Truck,
   User,
   Wrench,
-  AlertTriangle,
   CheckCircle2,
   Plus,
   Trash2,
@@ -34,7 +33,6 @@ import {
   History,
   Sparkles,
   ShieldCheck,
-  Building2,
 } from "lucide-react";
 import { PinOverrideModal } from "./PinOverrideModal";
 import { AddNewPartModal } from "./AddNewPartModal";
@@ -228,14 +226,14 @@ export function JobCardTerminal() {
                 phone: r.driverPhone,
                 assignedPlate: r.plateNumber,
               }));
-            } catch (e) {}
+            } catch {}
           }
 
           const localPartsStr = localStorage.getItem(`tala_parts_${targetCid}`);
           if (localPartsStr && fetchedParts.length === 0) {
             try {
               fetchedParts = JSON.parse(localPartsStr);
-            } catch (e) {}
+            } catch {}
           }
         }
 

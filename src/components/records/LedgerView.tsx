@@ -9,13 +9,10 @@ import {
   FileText,
   Download,
   Search,
-  Filter,
   ShieldAlert,
-  ShieldCheck,
   CheckCircle2,
   Lock,
   Printer,
-  Calendar,
 } from "lucide-react";
 import { PrintableJobCard } from "./PrintableJobCard";
 

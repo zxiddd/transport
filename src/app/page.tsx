@@ -6,11 +6,8 @@ import { useAuth } from "@/context/AuthContext";
 import { JobCardTerminal } from "@/components/terminal/JobCardTerminal";
 import { LedgerView } from "@/components/records/LedgerView";
 import {
-  Wrench,
   ShieldCheck,
-  Building2,
   FileText,
-  History,
   PlusCircle,
 } from "lucide-react";
 
