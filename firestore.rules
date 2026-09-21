@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function for authentication check
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // User Profile mapping
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Company Profiles & nested subcollections
+    match /companies/{companyId} {
+      allow read, write: if isAuthenticated();
+
+      match /trailers/{trailerId} {
+        allow read, write: if isAuthenticated();
+      }
+      match /drivers/{driverId} {
+        allow read, write: if isAuthenticated();
+      }
+      match /parts/{partId} {
+        allow read, write: if isAuthenticated();
+      }
+      match /job_cards/{jobCardId} {
+        allow read, create: if isAuthenticated();
+        allow update: if isAuthenticated() && resource.data.status != "completed";
+        allow delete: if false;
+      }
+      match /theft_audit_records/{auditId} {
+        allow read, create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // Top-level Fleet Trailers
+    match /trailers/{trailerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Top-level Drivers
+    match /drivers/{driverId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Top-level Part Catalog
+    match /part_catalog/{partId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Top-level Job Cards
+    match /job_cards/{jobCardId} {
+      allow read, create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.status != "completed";
+      allow delete: if false;
+    }
+
+    // Top-level Theft Audit Records
+    match /theft_audit_records/{auditId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+  }
+}
