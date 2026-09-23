@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Wizard } from "./Wizard";
 
@@ -19,7 +19,7 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
     // Failsafe timer to prevent infinite loading UI
     const safetyTimeout = setTimeout(() => {
       setCheckingStatus(false);
-    }, 1500);
+    }, 1000);
 
     if (!companyId) {
       setCheckingStatus(false);
@@ -27,37 +27,67 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
       return;
     }
 
-    const companyRef = doc(db, "companies", companyId);
-
-    // Real-time listener on active company document
-    const unsubscribe = onSnapshot(
-      companyRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data.hasCompletedOnboarding === true) {
+    // Check local storage status first
+    if (typeof window !== "undefined") {
+      const local = localStorage.getItem(`tala_company_${companyId}`);
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (parsed?.hasCompletedOnboarding) {
             setCompleted(true);
-          } else {
-            setCompleted(false);
+            setCheckingStatus(false);
+            clearTimeout(safetyTimeout);
+            return;
           }
-        } else {
-          setCompleted(false);
+        } catch {
+          // ignore
         }
-        setCheckingStatus(false);
-        clearTimeout(safetyTimeout);
-      },
-      (error) => {
-        console.warn("Onboarding gate snapshot listener fallback:", error);
-        setCheckingStatus(false);
-        clearTimeout(safetyTimeout);
       }
-    );
+    }
+
+    if (companyProfile?.hasCompletedOnboarding) {
+      setCompleted(true);
+      setCheckingStatus(false);
+      clearTimeout(safetyTimeout);
+      return;
+    }
+
+    // Only subscribe to Firestore if cloud credentials exist
+    if (!isFirebaseConfigured || !db) {
+      setCheckingStatus(false);
+      clearTimeout(safetyTimeout);
+      return;
+    }
+
+    let unsubscribe = () => {};
+    try {
+      const companyRef = doc(db, "companies", companyId);
+      unsubscribe = onSnapshot(
+        companyRef,
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            setCompleted(Boolean(data.hasCompletedOnboarding));
+          }
+          setCheckingStatus(false);
+          clearTimeout(safetyTimeout);
+        },
+        () => {
+          // Graceful fallback on network/offline interruption
+          setCheckingStatus(false);
+          clearTimeout(safetyTimeout);
+        }
+      );
+    } catch {
+      setCheckingStatus(false);
+      clearTimeout(safetyTimeout);
+    }
 
     return () => {
       clearTimeout(safetyTimeout);
       unsubscribe();
     };
-  }, [companyId]);
+  }, [companyId, companyProfile]);
 
   if (loading || checkingStatus) {
     return (
@@ -69,7 +99,7 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
               Tala Transport Workshop Terminal
             </h3>
             <p className="text-xs font-semibold text-[#86868B]">
-              Verifying company status & Firestore records...
+              Verifying company status & workshop records...
             </p>
           </div>
         </div>
@@ -77,8 +107,10 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
     );
   }
 
-  // If onboarding has not been completed, render full-screen setup wizard
-  if (!completed || !companyProfile?.hasCompletedOnboarding) {
+  // If onboarding has not been completed in cloud or local cache, render setup wizard
+  const isUnlocked = completed || Boolean(companyProfile?.hasCompletedOnboarding);
+
+  if (!isUnlocked) {
     return (
       <div className="min-h-screen bg-[#F5F5F7] flex flex-col justify-center py-10 font-sans selection:bg-[#10B981] selection:text-white">
         <div className="text-center mb-4">

@@ -6,18 +6,24 @@ export interface CompanyProfile {
   branch: string;
   currency: "SAR";
   vatEnabled: boolean;
+  vatRatePercentage?: number; // e.g. 15, 5, 0, or custom rate
   managerPin: string; // 4-digit code or hashed string
   hasCompletedOnboarding: boolean;
   createdAt: Timestamp;
 }
 
 export interface Trailer {
-  id: string; // Normalized plate number (e.g. "7842-JED")
+  id: string; // Normalized plate number or trailer ID (e.g. "1286" or "7842-JED")
   companyId: string;
   plateNumber: string;
-  modelType: string; // e.g. "Flatbed 40ft", "Lowbed", "Curtain Sider", "Tanker", "Box"
+  trailerNumber?: string;
+  modelType: string; // e.g. "Flatbed 40ft", "Lowbed", "Curtain Sider", "40ft Container Chassis"
   defaultDriverId: string;
+  driverName?: string;
   status: "active" | "in-workshop" | "grounded";
+  loadDate?: string;
+  fromLocation?: string;
+  toLocation?: string;
   createdAt: Timestamp;
 }
 
@@ -28,6 +34,11 @@ export interface Driver {
   iqamaNumber: string;
   phone: string;
   assignedPlate: string;
+  trailerNumber?: string;
+  loadDate?: string;
+  fromLocation?: string;
+  toLocation?: string;
+  status?: "active" | "grounded" | "in-workshop";
   createdAt: Timestamp;
 }
 
@@ -67,6 +78,7 @@ export interface JobCard {
   operatorName: string;
   items: JobLineItem[];
   subtotalSAR: number;
+  vatRatePercentage?: number; // Applied VAT % (e.g. 15, 5, 0)
   vatAmountSAR: number;
   grandTotalSAR: number;
   status: "completed" | "flagged_review" | "rejected";

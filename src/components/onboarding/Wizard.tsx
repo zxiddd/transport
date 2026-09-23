@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { writeBatch, doc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { WizardStep1, Step1Data } from "./WizardStep1";
 import { WizardStep2, FleetRow } from "./WizardStep2";
@@ -61,93 +61,7 @@ export function Wizard({ onOnboardingComplete }: WizardProps) {
       setIsSubmitting(true);
       const targetCid = companyId || "tala-transport";
 
-      try {
-        const batch = writeBatch(db);
-
-        // 1. Company Profile Document
-        const companyRef = doc(db, "companies", targetCid);
-        batch.set(
-          companyRef,
-          {
-            id: targetCid,
-            name: step1Data.companyName.trim(),
-            branch: step1Data.branch.trim(),
-            currency: "SAR",
-            vatEnabled: step1Data.vatEnabled,
-            managerPin: step1Data.managerPin,
-            hasCompletedOnboarding: true,
-            createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        // 2. Trailers & Drivers Ingestion
-        fleetRows.forEach((row) => {
-          const normalizedPlate = row.plateNumber.trim().toUpperCase();
-          const driverId = `driver-${normalizedPlate}`;
-
-          const companyTrailerRef = doc(db, `companies/${targetCid}/trailers`, normalizedPlate);
-          const topTrailerRef = doc(db, "trailers", normalizedPlate);
-
-          const trailerPayload = {
-            id: normalizedPlate,
-            companyId: targetCid,
-            plateNumber: normalizedPlate,
-            modelType: row.modelType,
-            defaultDriverId: driverId,
-            status: "active",
-            createdAt: serverTimestamp(),
-          };
-
-          batch.set(companyTrailerRef, trailerPayload);
-          batch.set(topTrailerRef, trailerPayload);
-
-          const companyDriverRef = doc(db, `companies/${targetCid}/drivers`, driverId);
-          const topDriverRef = doc(db, "drivers", driverId);
-
-          const driverPayload = {
-            id: driverId,
-            companyId: targetCid,
-            fullName: row.driverFullName.trim(),
-            iqamaNumber: row.iqamaNumber.trim(),
-            phone: row.driverPhone.trim(),
-            assignedPlate: normalizedPlate,
-            createdAt: serverTimestamp(),
-          };
-
-          batch.set(companyDriverRef, driverPayload);
-          batch.set(topDriverRef, driverPayload);
-        });
-
-        // 3. Anti-Theft Part Catalog Ingestion
-        parts.forEach((part) => {
-          const partDocId = part.id.replace(/\s+/g, "-").toLowerCase();
-          
-          const companyPartRef = doc(db, `companies/${targetCid}/parts`, partDocId);
-          const topPartRef = doc(db, "part_catalog", partDocId);
-
-          const partPayload = {
-            id: partDocId,
-            companyId: targetCid,
-            name: part.name,
-            category: part.category,
-            cooldownDays: Number(part.cooldownDays),
-            baselineCostSAR: Number(part.baselineCostSAR),
-          };
-
-          batch.set(companyPartRef, partPayload);
-          batch.set(topPartRef, partPayload);
-        });
-
-        await batch.commit();
-      } catch (fsError) {
-        console.warn(
-          "Cloud Firestore write pending/uninitialized in Firebase console. Storing local fallback session.",
-          fsError
-        );
-      }
-
-      // Save fallback in localStorage so UI seamlessly progresses
+      // 1. Save locally first so UI always succeeds
       if (typeof window !== "undefined") {
         localStorage.setItem(
           `tala_company_${targetCid}`,
@@ -165,10 +79,95 @@ export function Wizard({ onOnboardingComplete }: WizardProps) {
         localStorage.setItem(`tala_parts_${targetCid}`, JSON.stringify(parts));
       }
 
+      // 2. Commit to Firestore if online & configured
+      if (isFirebaseConfigured && db) {
+        try {
+          const batch = writeBatch(db);
+
+          // Company Profile Document
+          const companyRef = doc(db, "companies", targetCid);
+          batch.set(
+            companyRef,
+            {
+              id: targetCid,
+              name: step1Data.companyName.trim(),
+              branch: step1Data.branch.trim(),
+              currency: "SAR",
+              vatEnabled: step1Data.vatEnabled,
+              managerPin: step1Data.managerPin,
+              hasCompletedOnboarding: true,
+              createdAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          // Trailers & Drivers Ingestion
+          fleetRows.forEach((row) => {
+            const normalizedPlate = row.plateNumber.trim().toUpperCase();
+            const driverId = `driver-${normalizedPlate}`;
+
+            const companyTrailerRef = doc(db, `companies/${targetCid}/trailers`, normalizedPlate);
+            const topTrailerRef = doc(db, "trailers", normalizedPlate);
+
+            const trailerPayload = {
+              id: normalizedPlate,
+              companyId: targetCid,
+              plateNumber: normalizedPlate,
+              modelType: row.modelType,
+              defaultDriverId: driverId,
+              status: "active",
+              createdAt: serverTimestamp(),
+            };
+
+            batch.set(companyTrailerRef, trailerPayload);
+            batch.set(topTrailerRef, trailerPayload);
+
+            const companyDriverRef = doc(db, `companies/${targetCid}/drivers`, driverId);
+            const topDriverRef = doc(db, "drivers", driverId);
+
+            const driverPayload = {
+              id: driverId,
+              companyId: targetCid,
+              fullName: row.driverFullName.trim(),
+              iqamaNumber: row.iqamaNumber.trim(),
+              phone: row.driverPhone.trim(),
+              assignedPlate: normalizedPlate,
+              createdAt: serverTimestamp(),
+            };
+
+            batch.set(companyDriverRef, driverPayload);
+            batch.set(topDriverRef, driverPayload);
+          });
+
+          // Anti-Theft Part Catalog Ingestion
+          parts.forEach((part) => {
+            const partDocId = part.id.replace(/\s+/g, "-").toLowerCase();
+
+            const companyPartRef = doc(db, `companies/${targetCid}/parts`, partDocId);
+            const topPartRef = doc(db, "part_catalog", partDocId);
+
+            const partPayload = {
+              id: partDocId,
+              companyId: targetCid,
+              name: part.name,
+              category: part.category,
+              cooldownDays: Number(part.cooldownDays),
+              baselineCostSAR: Number(part.baselineCostSAR),
+            };
+
+            batch.set(companyPartRef, partPayload);
+            batch.set(topPartRef, partPayload);
+          });
+
+          await batch.commit();
+        } catch {
+          // offline fallback safely handled
+        }
+      }
+
       await refreshCompanyProfile();
       onOnboardingComplete();
-    } catch (error) {
-      console.error("Onboarding setup execution error:", error);
+    } catch {
       onOnboardingComplete();
     } finally {
       setIsSubmitting(false);

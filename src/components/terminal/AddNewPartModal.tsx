@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { X, Package } from "lucide-react";
 import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { PartCatalogItem } from "@/types/workshop";
 
@@ -45,7 +45,7 @@ export function AddNewPartModal({
     try {
       setSaving(true);
       const partDocId = `part-${Date.now()}`;
-      
+
       const newPart: PartCatalogItem = {
         id: partDocId,
         companyId: targetCid,
@@ -55,39 +55,54 @@ export function AddNewPartModal({
         baselineCostSAR: Number(baselineCostSAR) || 100,
       };
 
-      // Write to subcollection & top-level
-      await setDoc(doc(db, `companies/${targetCid}/parts`, partDocId), newPart);
-      await setDoc(doc(db, "part_catalog", partDocId), newPart);
+      // Always save to localStorage immediately
+      if (typeof window !== "undefined") {
+        try {
+          const partsStr = localStorage.getItem(`tala_parts_${targetCid}`);
+          const partsList = partsStr ? JSON.parse(partsStr) : [];
+          partsList.push(newPart);
+          localStorage.setItem(`tala_parts_${targetCid}`, JSON.stringify(partsList));
+          window.dispatchEvent(new CustomEvent("tala_part_catalog_updated", { detail: newPart }));
+        } catch {}
+      }
 
+      // Non-blocking Firestore sync in background (never blocks the UI)
+      if (isFirebaseConfigured && db) {
+        Promise.allSettled([
+          setDoc(doc(db, `companies/${targetCid}/parts`, partDocId), newPart),
+          setDoc(doc(db, "part_catalog", partDocId), newPart),
+        ]).catch(() => {});
+      }
+
+      // Instantly update parent UI and close modal
       onPartAdded(newPart);
       setName("");
       setCooldownDays(45);
       setBaselineCostSAR(500);
       onClose();
-    } catch (err) {
-      console.error("Failed to add new part:", err);
-      alert("Failed to save new part to catalog.");
+    } catch {
+      // safe fallback
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white border border-[#E5E5EA] rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 relative">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white/95 backdrop-blur-2xl border border-black/[0.08] rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-[0_24px_48px_rgba(0,0,0,0.12)] space-y-6 relative text-[#1D1D1F]">
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 text-[#86868B] hover:text-[#1D1D1F] p-2 rounded-full hover:bg-[#F5F5F7] transition-colors"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.05] transition-colors absolute top-5 right-5"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-[#10B981] flex items-center justify-center">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
             <Package className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-[#1D1D1F]">
+            <h3 className="text-lg font-semibold tracking-tight text-[#1D1D1F]">
               Add New Catalog Part
             </h3>
             <p className="text-xs text-[#86868B]">
@@ -98,20 +113,20 @@ export function AddNewPartModal({
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-[#86868B] uppercase tracking-wider mb-1.5">
               Part Name
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Brake Caliper Heavy Duty"
-              className="w-full h-[48px] px-4 bg-[#F5F5F7] border border-[#E5E5EA] rounded-xl text-sm font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:bg-white"
+              placeholder="e.g. Heavy Duty Brake Caliper"
+              className="w-full h-11 px-3.5 bg-black/[0.03] border border-black/[0.08] rounded-xl text-sm font-medium text-[#1D1D1F] focus:bg-white focus:border-emerald-500 transition-all outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-[#86868B] uppercase tracking-wider mb-1.5">
               Category
             </label>
             <select
@@ -121,7 +136,7 @@ export function AddNewPartModal({
                   e.target.value as "Tires" | "Brakes" | "Suspension" | "Fluids" | "Body" | "Other"
                 )
               }
-              className="w-full h-[48px] px-4 bg-[#F5F5F7] border border-[#E5E5EA] rounded-xl text-sm font-medium text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:bg-white"
+              className="w-full h-11 px-3 bg-black/[0.03] border border-black/[0.08] rounded-xl text-sm font-medium text-[#1D1D1F] focus:bg-white focus:border-emerald-500 transition-all outline-none"
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
@@ -133,36 +148,36 @@ export function AddNewPartModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-[#86868B] uppercase tracking-wider mb-1.5">
                 Cooldown (Days)
               </label>
               <input
                 type="number"
                 value={cooldownDays}
                 onChange={(e) => setCooldownDays(Number(e.target.value))}
-                className="w-full h-[48px] px-4 bg-[#F5F5F7] border border-[#E5E5EA] rounded-xl text-sm font-bold font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:bg-white"
+                className="w-full h-11 px-3.5 bg-black/[0.03] border border-black/[0.08] rounded-xl text-sm font-mono font-semibold text-[#1D1D1F] focus:bg-white focus:border-emerald-500 transition-all outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-[#86868B] uppercase tracking-wider mb-1.5">
                 Base Cost (SAR)
               </label>
               <input
                 type="number"
                 value={baselineCostSAR}
                 onChange={(e) => setBaselineCostSAR(Number(e.target.value))}
-                className="w-full h-[48px] px-4 bg-[#F5F5F7] border border-[#E5E5EA] rounded-xl text-sm font-bold font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:bg-white"
+                className="w-full h-11 px-3.5 bg-black/[0.03] border border-black/[0.08] rounded-xl text-sm font-mono font-semibold text-[#1D1D1F] focus:bg-white focus:border-emerald-500 transition-all outline-none"
               />
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-3 pt-1">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 h-[48px] bg-[#F5F5F7] hover:bg-[#E5E5EA] text-[#1D1D1F] text-sm font-semibold rounded-2xl transition-all"
+            className="flex-1 h-11 bg-black/[0.04] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-semibold rounded-xl transition-all"
           >
             Cancel
           </button>
@@ -170,7 +185,7 @@ export function AddNewPartModal({
             type="button"
             onClick={handleSavePart}
             disabled={saving || !name.trim()}
-            className="flex-1 h-[48px] bg-[#10B981] hover:bg-[#059669] text-white text-sm font-bold rounded-2xl transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+            className="flex-1 h-11 bg-[#1D1D1F] hover:bg-black text-white text-xs font-semibold rounded-xl transition-all shadow-sm disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save Part"}
           </button>

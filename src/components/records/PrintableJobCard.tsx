@@ -4,6 +4,7 @@ import React from "react";
 import { X, Printer, ShieldCheck, Building2, Lock } from "lucide-react";
 import { JobCard } from "@/types/workshop";
 import { useAuth } from "@/context/AuthContext";
+import { printJobCardInvoice } from "@/lib/printUtils";
 
 interface PrintableJobCardProps {
   jobCard: JobCard | null;
@@ -16,7 +17,7 @@ export function PrintableJobCard({ jobCard, onClose }: PrintableJobCardProps) {
   if (!jobCard) return null;
 
   const handlePrint = () => {
-    window.print();
+    printJobCardInvoice(jobCard, companyProfile);
   };
 
   const formattedDate = jobCard.createdAt?.toDate
@@ -211,7 +212,7 @@ export function PrintableJobCard({ jobCard, onClose }: PrintableJobCardProps) {
                 </span>
               </div>
               <div className="flex justify-between text-[#86868B]">
-                <span>KSA 15% Standard VAT:</span>
+                <span>VAT ({jobCard.vatRatePercentage ?? (jobCard.vatAmountSAR > 0 ? 15 : 0)}%):</span>
                 <span className="font-mono font-semibold text-[#1D1D1F]">
                   {jobCard.vatAmountSAR.toFixed(2)} SAR
                 </span>

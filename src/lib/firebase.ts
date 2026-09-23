@@ -2,10 +2,15 @@ import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
 import { getAuth, Auth } from "firebase/auth";
 
-const hasRealConfig = Boolean(
+export const isFirebaseConfigured = Boolean(
   process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
-  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.includes("Dummy") &&
+    !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.includes("dummy") &&
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID &&
+    !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID.includes("tala-transport-dev")
 );
+
+const hasRealConfig = isFirebaseConfigured;
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDummyKeyForLocalDevAndBuild012345678",
@@ -25,8 +30,7 @@ try {
   app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
   db = getFirestore(app);
   auth = getAuth(app);
-} catch (error) {
-  console.warn("Firebase initialization warning (fallback instance):", error);
+} catch {
   app = !getApps().length
     ? initializeApp({
         apiKey: "AIzaSyDummyKeyForLocalDevAndBuild012345678",

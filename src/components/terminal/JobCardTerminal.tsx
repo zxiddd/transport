@@ -12,7 +12,7 @@ import {
   doc,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import {
   Trailer,
@@ -29,15 +29,25 @@ import {
   Plus,
   Trash2,
   ShieldAlert,
-  Percent,
   History,
   Sparkles,
   ShieldCheck,
+  Search,
+  MapPin,
+  Calendar,
+  ChevronDown,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { PinOverrideModal } from "./PinOverrideModal";
 import { AddNewPartModal } from "./AddNewPartModal";
 import { JobInvoiceModal } from "./JobInvoiceModal";
 import { INITIAL_PARTS } from "../onboarding/WizardStep3";
+import {
+  getTalaTrailers,
+  getTalaDrivers,
+  TALA_FLEET_50,
+} from "@/lib/talaFleetData";
 
 const AXLE_POSITIONS = [
   "Steer Axle Left",
@@ -52,67 +62,129 @@ const AXLE_POSITIONS = [
   "Chassis / General",
 ];
 
-const DEFAULT_TRAILERS: Trailer[] = [
-  {
-    id: "7842-JED",
-    companyId: "tala-transport",
-    plateNumber: "7842-JED",
-    modelType: "Flatbed 40ft",
-    defaultDriverId: "driver-7842-JED",
-    status: "active",
-    createdAt: new Date() as any,
-  },
-  {
-    id: "3195-JED",
-    companyId: "tala-transport",
-    plateNumber: "3195-JED",
-    modelType: "Curtain Sider",
-    defaultDriverId: "driver-3195-JED",
-    status: "active",
-    createdAt: new Date() as any,
-  },
-  {
-    id: "9041-JED",
-    companyId: "tala-transport",
-    plateNumber: "9041-JED",
-    modelType: "Lowbed",
-    defaultDriverId: "driver-9041-JED",
-    status: "active",
-    createdAt: new Date() as any,
-  },
-];
+function getDaysSinceService(createdAt: any): number {
+  if (!createdAt) return 14;
+  let d: Date;
+  if (typeof createdAt?.toDate === "function") {
+    d = createdAt.toDate();
+  } else if (createdAt?.seconds) {
+    d = new Date(createdAt.seconds * 1000);
+  } else if (typeof createdAt === "string" || typeof createdAt === "number") {
+    d = new Date(createdAt);
+  } else if (createdAt instanceof Date) {
+    d = createdAt;
+  } else {
+    return 14;
+  }
+  const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(1, isNaN(diffDays) ? 14 : diffDays);
+}
 
-const DEFAULT_DRIVERS: Driver[] = [
-  {
-    id: "driver-7842-JED",
-    companyId: "tala-transport",
-    fullName: "Ahmed Al-Ghamdi",
-    iqamaNumber: "2489102934",
-    phone: "+966 50 123 4567",
-    assignedPlate: "7842-JED",
-    createdAt: new Date() as any,
-  },
-  {
-    id: "driver-3195-JED",
-    companyId: "tala-transport",
-    fullName: "Tariq Mansoor",
-    iqamaNumber: "2341908273",
-    phone: "+966 55 987 6543",
-    assignedPlate: "3195-JED",
-    createdAt: new Date() as any,
-  },
-  {
-    id: "driver-9041-JED",
-    companyId: "tala-transport",
-    fullName: "Sami Al-Harbi",
-    iqamaNumber: "2501928374",
-    phone: "+966 54 321 0987",
-    assignedPlate: "9041-JED",
-    createdAt: new Date() as any,
-  },
-];
+function getInitialPastJobsForTrailer(
+  plate: string,
+  companyId: string,
+  driverName?: string
+): JobCard[] {
+  const date14DaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const date28DaysAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
 
-export function JobCardTerminal() {
+  return [
+    {
+      id: `job-past-${plate}-01`,
+      jobCardNumber: `TT-2026-${Math.abs(
+        plate.split("").reduce((a, b) => a + b.charCodeAt(0), 1000)
+      )}`,
+      companyId,
+      trailerPlate: plate,
+      trailerModel: "Flatbed 40ft",
+      driverId: `driver-${plate}`,
+      driverName: driverName || "Mohd Dilshad",
+      driverIqama: "2489102934",
+      operatorName: "Yard Supervisor",
+      items: [
+        {
+          id: `line-past-01`,
+          partName: "Drive Tire 315/80 R22.5",
+          category: "Tires",
+          axlePosition: "Trailer Axle 1",
+          action: "replace",
+          quantity: 1,
+          unitCostSAR: 950,
+          subtotalSAR: 950,
+          isFlagged: false,
+        },
+        {
+          id: `line-past-02`,
+          partName: "Heavy Duty Brake Drum",
+          category: "Brakes",
+          axlePosition: "Trailer Axle 2",
+          action: "replace",
+          quantity: 1,
+          unitCostSAR: 620,
+          subtotalSAR: 620,
+          isFlagged: false,
+        },
+      ],
+      subtotalSAR: 1570,
+      vatRatePercentage: 15,
+      vatAmountSAR: 235.5,
+      grandTotalSAR: 1805.5,
+      status: "completed",
+      createdAt: {
+        seconds: Math.floor(date14DaysAgo.getTime() / 1000),
+        nanoseconds: 0,
+        toDate: () => date14DaysAgo,
+      } as any,
+    },
+    {
+      id: `job-past-${plate}-02`,
+      jobCardNumber: `TT-2026-${Math.abs(
+        plate.split("").reduce((a, b) => a + b.charCodeAt(0), 2000)
+      )}`,
+      companyId,
+      trailerPlate: plate,
+      trailerModel: "Flatbed 40ft",
+      driverId: `driver-${plate}`,
+      driverName: driverName || "Mohd Dilshad",
+      driverIqama: "2489102934",
+      operatorName: "Yard Supervisor",
+      items: [
+        {
+          id: `line-past-03`,
+          partName: "Air Brake Chamber Type 30/30",
+          category: "Brakes",
+          axlePosition: "Trailer Axle 3",
+          action: "replace",
+          quantity: 1,
+          unitCostSAR: 380,
+          subtotalSAR: 380,
+          isFlagged: false,
+        },
+      ],
+      subtotalSAR: 380,
+      vatRatePercentage: 15,
+      vatAmountSAR: 57,
+      grandTotalSAR: 437,
+      status: "completed",
+      createdAt: {
+        seconds: Math.floor(date28DaysAgo.getTime() / 1000),
+        nanoseconds: 0,
+        toDate: () => date28DaysAgo,
+      } as any,
+    },
+  ];
+}
+
+const DEFAULT_TRAILERS: Trailer[] = getTalaTrailers("tala-transport");
+const DEFAULT_DRIVERS: Driver[] = getTalaDrivers("tala-transport");
+
+export function JobCardTerminal({
+  onJobSaved,
+  selectedTrailerNumber,
+}: {
+  onJobSaved?: () => void;
+  selectedTrailerNumber?: string;
+} = {}) {
   const { companyId, companyProfile } = useAuth();
   const targetCid = companyId || "tala-transport";
 
@@ -122,10 +194,10 @@ export function JobCardTerminal() {
   const [partCatalog, setPartCatalog] = useState<PartCatalogItem[]>(
     INITIAL_PARTS as any
   );
-  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
 
   // Card 1 State: Vehicle & Driver Selection
-  const [selectedPlate, setSelectedPlate] = useState<string>("7842-JED");
+  const [selectedPlate, setSelectedPlate] = useState<string>("1286");
   const [selectedTrailer, setSelectedTrailer] = useState<Trailer | null>(
     DEFAULT_TRAILERS[0]
   );
@@ -133,7 +205,11 @@ export function JobCardTerminal() {
     DEFAULT_DRIVERS[0]
   );
   const [isReassigningDriver, setIsReassigningDriver] = useState(false);
-  const [selectedDriverId, setSelectedDriverId] = useState<string>("driver-7842-JED");
+  const [selectedDriverId, setSelectedDriverId] = useState<string>("driver-1286");
+
+  // Search Combobox State
+  const [trailerSearchQuery, setTrailerSearchQuery] = useState<string>("");
+  const [isTrailerDropdownOpen, setIsTrailerDropdownOpen] = useState(false);
 
   // Timeline State
   const [pastJobCards, setPastJobCards] = useState<JobCard[]>([]);
@@ -145,122 +221,191 @@ export function JobCardTerminal() {
   // Prevented Financial Leakage Counter
   const [preventedLeakageSAR, setPreventedLeakageSAR] = useState<number>(0);
 
-  // VAT Toggle State
-  const [vatEnabled, setVatEnabled] = useState<boolean>(
-    companyProfile?.vatEnabled ?? true
+  // Dynamic VAT Percentage State
+  const [vatRate, setVatRate] = useState<number>(
+    companyProfile?.vatRatePercentage ?? (companyProfile?.vatEnabled ? 15 : 0)
   );
 
   // Modals
   const [activeOverrideIndex, setActiveOverrideIndex] = useState<number | null>(
     null
   );
+  const [theftAlertPopup, setTheftAlertPopup] = useState<{
+    item: JobLineItem;
+    index: number;
+  } | null>(null);
   const [isAddPartOpen, setIsAddPartOpen] = useState(false);
   const [savedJobCard, setSavedJobCard] = useState<JobCard | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. Fetch catalog data on mount
+  // 1. Instant Catalog Load + Background Firestore Sync
   useEffect(() => {
-    const fetchCatalog = async () => {
+    let fetchedTrailers: Trailer[] = [];
+    let fetchedDrivers: Driver[] = [];
+    let customParts: PartCatalogItem[] = [];
+
+    if (typeof window !== "undefined") {
       try {
-        setLoadingCatalog(true);
+        const localFleetStr = localStorage.getItem(`tala_fleet_${targetCid}`);
+        if (localFleetStr) {
+          const rows = JSON.parse(localFleetStr);
+          if (Array.isArray(rows) && rows.length >= 10) {
+            fetchedTrailers = rows.map((r: any) => ({
+              id: r.trailerNumber || r.plateNumber,
+              companyId: targetCid,
+              plateNumber: r.trailerNumber || r.plateNumber,
+              trailerNumber: r.trailerNumber || r.plateNumber,
+              modelType: r.modelType || "Flatbed 40ft",
+              defaultDriverId: `driver-${r.trailerNumber || r.plateNumber}`,
+              driverName: r.driverName || r.driverFullName,
+              loadDate: r.loadDate || "20/09/2026",
+              fromLocation: r.fromLocation || "Jeddah",
+              toLocation: r.toLocation || "9 am Port",
+              status: r.status || "active",
+              createdAt: new Date() as any,
+            }));
 
-        let fetchedTrailers: Trailer[] = [];
-        try {
-          const trailersSnap = await getDocs(
-            query(collection(db, "trailers"), where("companyId", "==", targetCid))
-          );
-          fetchedTrailers = trailersSnap.docs.map(
-            (d) => d.data() as Trailer
-          );
-        } catch (e) {
-          console.warn("Firestore trailers fetch fallback:", e);
-        }
-
-        let fetchedDrivers: Driver[] = [];
-        try {
-          const driversSnap = await getDocs(
-            query(collection(db, "drivers"), where("companyId", "==", targetCid))
-          );
-          fetchedDrivers = driversSnap.docs.map(
-            (d) => d.data() as Driver
-          );
-        } catch (e) {
-          console.warn("Firestore drivers fetch fallback:", e);
-        }
-
-        let fetchedParts: PartCatalogItem[] = [];
-        try {
-          const partsSnap = await getDocs(
-            query(
-              collection(db, "part_catalog"),
-              where("companyId", "==", targetCid)
-            )
-          );
-          fetchedParts = partsSnap.docs.map(
-            (d) => d.data() as PartCatalogItem
-          );
-        } catch (e) {
-          console.warn("Firestore parts fetch fallback:", e);
-        }
-
-        // Check local storage fallback
-        if (typeof window !== "undefined") {
-          const localFleetStr = localStorage.getItem(`tala_fleet_${targetCid}`);
-          if (localFleetStr && fetchedTrailers.length === 0) {
-            try {
-              const rows = JSON.parse(localFleetStr);
-              fetchedTrailers = rows.map((r: any) => ({
-                id: r.plateNumber,
-                companyId: targetCid,
-                plateNumber: r.plateNumber,
-                modelType: r.modelType,
-                defaultDriverId: `driver-${r.plateNumber}`,
-                status: "active",
-              }));
-
-              fetchedDrivers = rows.map((r: any) => ({
-                id: `driver-${r.plateNumber}`,
-                companyId: targetCid,
-                fullName: r.driverFullName,
-                iqamaNumber: r.iqamaNumber,
-                phone: r.driverPhone,
-                assignedPlate: r.plateNumber,
-              }));
-            } catch {}
-          }
-
-          const localPartsStr = localStorage.getItem(`tala_parts_${targetCid}`);
-          if (localPartsStr && fetchedParts.length === 0) {
-            try {
-              fetchedParts = JSON.parse(localPartsStr);
-            } catch {}
+            fetchedDrivers = rows.map((r: any) => ({
+              id: `driver-${r.trailerNumber || r.plateNumber}`,
+              companyId: targetCid,
+              fullName: r.driverName || r.driverFullName,
+              iqamaNumber: r.iqamaNumber || "2489100000",
+              phone: r.phone || r.driverPhone || "+966 50 000 0000",
+              assignedPlate: r.trailerNumber || r.plateNumber,
+              trailerNumber: r.trailerNumber || r.plateNumber,
+              loadDate: r.loadDate || "20/09/2026",
+              fromLocation: r.fromLocation || "Jeddah",
+              toLocation: r.toLocation || "9 am Port",
+              status: r.status || "active",
+              createdAt: new Date() as any,
+            }));
           }
         }
+      } catch {}
 
-        const activeTrailers = fetchedTrailers.length > 0 ? fetchedTrailers : DEFAULT_TRAILERS;
-        const activeDrivers = fetchedDrivers.length > 0 ? fetchedDrivers : DEFAULT_DRIVERS;
-        const activeParts = fetchedParts.length > 0 ? fetchedParts : (INITIAL_PARTS as any);
-
-        setTrailers(activeTrailers);
-        setDrivers(activeDrivers);
-        setPartCatalog(activeParts);
-
-        if (activeTrailers.length > 0) {
-          handleSelectPlate(activeTrailers[0].plateNumber, activeTrailers, activeDrivers);
+      try {
+        const localPartsStr = localStorage.getItem(`tala_parts_${targetCid}`);
+        if (localPartsStr) {
+          customParts = JSON.parse(localPartsStr);
         }
-      } catch (err) {
-        console.error("Catalog load error:", err);
-      } finally {
-        setLoadingCatalog(false);
+      } catch {}
+    }
+
+    const activeTrailers = fetchedTrailers.length > 0 ? fetchedTrailers : DEFAULT_TRAILERS;
+    const activeDrivers = fetchedDrivers.length > 0 ? fetchedDrivers : DEFAULT_DRIVERS;
+
+    // Cache to localStorage if not yet written
+    if (typeof window !== "undefined" && fetchedTrailers.length === 0) {
+      try {
+        localStorage.setItem(`tala_fleet_${targetCid}`, JSON.stringify(TALA_FLEET_50));
+      } catch {}
+    }
+
+    // Merge custom parts with default catalog
+    const mergedPartsMap = new Map<string, PartCatalogItem>();
+    INITIAL_PARTS.forEach((p) => mergedPartsMap.set(p.name.toLowerCase(), p as PartCatalogItem));
+    customParts.forEach((p) => mergedPartsMap.set(p.name.toLowerCase(), p));
+    const activeParts = Array.from(mergedPartsMap.values());
+
+    setTrailers(activeTrailers);
+    setDrivers(activeDrivers);
+    setPartCatalog(activeParts);
+    setLoadingCatalog(false);
+
+    const initialTarget = selectedTrailerNumber || activeTrailers[0]?.plateNumber || "1286";
+    handleSelectPlate(initialTarget, activeTrailers, activeDrivers);
+
+    // Non-blocking parallel background sync with Firestore
+    if (isFirebaseConfigured && db) {
+      Promise.allSettled([
+        getDocs(query(collection(db, "trailers"), where("companyId", "==", targetCid))),
+        getDocs(query(collection(db, "drivers"), where("companyId", "==", targetCid))),
+        getDocs(query(collection(db, "part_catalog"), where("companyId", "==", targetCid))),
+      ]).then(([tRes, dRes, pRes]) => {
+        if (tRes.status === "fulfilled" && tRes.value?.docs?.length > 0) {
+          const cloudTrailers = tRes.value.docs.map((d: any) => d.data() as Trailer);
+          if (cloudTrailers.length > 0) setTrailers(cloudTrailers);
+        }
+        if (dRes.status === "fulfilled" && dRes.value?.docs?.length > 0) {
+          const cloudDrivers = dRes.value.docs.map((d: any) => d.data() as Driver);
+          if (cloudDrivers.length > 0) setDrivers(cloudDrivers);
+        }
+        if (pRes.status === "fulfilled" && pRes.value?.docs?.length > 0) {
+          const cloudParts = pRes.value.docs.map((d: any) => d.data() as PartCatalogItem);
+          if (cloudParts.length > 0) {
+            setPartCatalog((prev) => {
+              const m = new Map<string, PartCatalogItem>();
+              prev.forEach((it) => m.set(it.name.toLowerCase(), it));
+              cloudParts.forEach((it) => m.set(it.name.toLowerCase(), it));
+              return Array.from(m.values());
+            });
+          }
+        }
+      }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetCid]);
+
+  // Synchronize when selectedTrailerNumber prop is triggered externally
+  useEffect(() => {
+    if (selectedTrailerNumber && trailers.length > 0) {
+      handleSelectPlate(selectedTrailerNumber, trailers, drivers);
+      setTrailerSearchQuery("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTrailerNumber]);
+
+  // Filtered trailers for live searchable combobox
+  const filteredTrailers = React.useMemo(() => {
+    if (!trailerSearchQuery.trim()) return trailers;
+    const q = trailerSearchQuery.toLowerCase().trim();
+    return trailers.filter((t) => {
+      const matchPlate = t.plateNumber.toLowerCase().includes(q);
+      const matchTrailerNo = (t.trailerNumber || "").toLowerCase().includes(q);
+      const matchDriver = (t.driverName || "").toLowerCase().includes(q);
+      const matchModel = t.modelType.toLowerCase().includes(q);
+      const matchFrom = (t.fromLocation || "").toLowerCase().includes(q);
+      const matchTo = (t.toLocation || "").toLowerCase().includes(q);
+      const assigned = drivers.find(
+        (d) => d.id === t.defaultDriverId || d.assignedPlate === t.plateNumber
+      );
+      const matchAssignedName = assigned ? assigned.fullName.toLowerCase().includes(q) : false;
+      return (
+        matchPlate ||
+        matchTrailerNo ||
+        matchDriver ||
+        matchModel ||
+        matchFrom ||
+        matchTo ||
+        matchAssignedName
+      );
+    });
+  }, [trailers, drivers, trailerSearchQuery]);
+
+  // Listen to new part additions from modal
+  useEffect(() => {
+    const handlePartCatalogUpdate = (e: any) => {
+      const newPart = e.detail;
+      if (newPart) {
+        setPartCatalog((prev) => {
+          if (prev.some((p) => p.name.toLowerCase() === newPart.name.toLowerCase())) {
+            return prev;
+          }
+          return [...prev, newPart];
+        });
       }
     };
-
-    fetchCatalog();
-  }, [targetCid]);
+    window.addEventListener("tala_part_catalog_updated", handlePartCatalogUpdate);
+    return () => window.removeEventListener("tala_part_catalog_updated", handlePartCatalogUpdate);
+  }, []);
 
   useEffect(() => {
     if (companyProfile) {
-      setVatEnabled(companyProfile.vatEnabled);
+      if (typeof companyProfile.vatRatePercentage === "number") {
+        setVatRate(companyProfile.vatRatePercentage);
+      } else {
+        setVatRate(companyProfile.vatEnabled ? 15 : 0);
+      }
     }
   }, [companyProfile]);
 
@@ -270,13 +415,29 @@ export function JobCardTerminal() {
     currentTrailers = trailers,
     currentDrivers = drivers
   ) => {
-    setSelectedPlate(plate);
-    const trailerMatch = currentTrailers.find((t) => t.plateNumber === plate);
+    const cleanPlate = (plate || "").trim();
+    setSelectedPlate(cleanPlate);
+
+    const trailerMatch = currentTrailers.find(
+      (t) =>
+        t.plateNumber === cleanPlate ||
+        t.trailerNumber === cleanPlate ||
+        t.id === cleanPlate ||
+        t.id === `TR-${cleanPlate}` ||
+        t.plateNumber.toLowerCase() === cleanPlate.toLowerCase()
+    );
     setSelectedTrailer(trailerMatch || null);
 
+    let driverMatch: Driver | undefined;
     if (trailerMatch) {
-      const driverMatch = currentDrivers.find(
-        (d) => d.id === trailerMatch.defaultDriverId || d.assignedPlate === plate
+      driverMatch = currentDrivers.find(
+        (d) =>
+          d.id === trailerMatch.defaultDriverId ||
+          d.assignedPlate === trailerMatch.plateNumber ||
+          d.assignedPlate === cleanPlate ||
+          d.trailerNumber === cleanPlate ||
+          (trailerMatch.driverName &&
+            d.fullName.toLowerCase() === trailerMatch.driverName.toLowerCase())
       );
       setAssignedDriver(driverMatch || null);
       setSelectedDriverId(driverMatch?.id || "");
@@ -287,18 +448,53 @@ export function JobCardTerminal() {
 
     try {
       setLoadingTimeline(true);
-      const jobsQuery = query(
-        collection(db, "job_cards"),
-        where("companyId", "==", targetCid),
-        where("trailerPlate", "==", plate),
-        orderBy("createdAt", "desc"),
-        limit(3)
-      );
-      const jobsSnap = await getDocs(jobsQuery);
-      const jobsList: JobCard[] = jobsSnap.docs.map((d) => d.data() as JobCard);
+      let jobsList: JobCard[] = [];
+
+      // Check local storage for past jobs for this plate
+      if (typeof window !== "undefined") {
+        try {
+          const localJobsStr = localStorage.getItem(`tala_jobs_${targetCid}`);
+          if (localJobsStr) {
+            const parsedJobs: JobCard[] = JSON.parse(localJobsStr);
+            jobsList = parsedJobs.filter((j) => j.trailerPlate === plate).slice(0, 3);
+          }
+        } catch {}
+      }
+
+      if (isFirebaseConfigured && db) {
+        try {
+          const jobsQuery = query(
+            collection(db, "job_cards"),
+            where("companyId", "==", targetCid),
+            where("trailerPlate", "==", plate),
+            orderBy("createdAt", "desc"),
+            limit(3)
+          );
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), 2000)
+          );
+          const jobsSnap = await Promise.race([getDocs(jobsQuery), timeoutPromise]);
+          if (jobsSnap?.docs?.length) {
+            jobsList = jobsSnap.docs.map((d: any) => d.data() as JobCard);
+          }
+        } catch {
+          // offline fallback
+        }
+      }
+
+      if (jobsList.length === 0) {
+        jobsList = getInitialPastJobsForTrailer(
+          cleanPlate,
+          targetCid,
+          driverMatch?.fullName
+        );
+      }
+
       setPastJobCards(jobsList);
-    } catch (err) {
-      console.warn("Error fetching past job cards:", err);
+      if (lineItems.length > 0) {
+        applyEvaluatedItems(lineItems, jobsList, cleanPlate);
+      }
+    } catch {
       setPastJobCards([]);
     } finally {
       setLoadingTimeline(false);
@@ -309,6 +505,133 @@ export function JobCardTerminal() {
     setSelectedDriverId(driverId);
     const dMatch = drivers.find((d) => d.id === driverId);
     setAssignedDriver(dMatch || null);
+  };
+
+  const evaluateFraudFlags = (
+    items: JobLineItem[],
+    pastJobs: JobCard[],
+    plate: string
+  ): JobLineItem[] => {
+    if (!plate) return items;
+
+    return items.map((item, idx) => {
+      // If already authorized by supervisor PIN, preserve authorization
+      if (item.authorizedByPin) {
+        return item;
+      }
+
+      if (item.action !== "replace") {
+        return {
+          ...item,
+          isFlagged: false,
+          flagReason: undefined,
+        };
+      }
+
+      const partMatch = partCatalog.find(
+        (p) => p.name.toLowerCase() === item.partName.toLowerCase()
+      );
+      const cooldownDays = partMatch?.cooldownDays || 45;
+      const normalizedPartName = item.partName.trim().toLowerCase();
+      const normalizedAxle = (item.axlePosition || "Trailer Axle 1").trim().toLowerCase();
+
+      // 1. Intra-Job Duplicate Detection:
+      // Check if another item in the CURRENT job card replaces the same part
+      const matchingItemInCurrentJob = items.find(
+        (other, otherIdx) =>
+          otherIdx !== idx &&
+          other.action === "replace" &&
+          other.partName.trim().toLowerCase() === normalizedPartName
+      );
+
+      if (matchingItemInCurrentJob) {
+        const isSameAxle =
+          (matchingItemInCurrentJob.axlePosition || "").trim().toLowerCase() === normalizedAxle;
+        const duplicateReason = isSameAxle
+          ? `Duplicate item ordered in current job: '${item.partName}' is already requested on ${matchingItemInCurrentJob.axlePosition}. Duplicate component replacement flagged for anti-theft review.`
+          : `Multiple duplicate '${item.partName}' replacements requested on Trailer #${plate} (on ${matchingItemInCurrentJob.axlePosition} and ${item.axlePosition}). Duplicate component claim flagged for theft prevention review.`;
+
+        return {
+          ...item,
+          isFlagged: true,
+          flagReason: duplicateReason,
+          authorizedByPin: false,
+        };
+      }
+
+      // 1B. Excessive quantity on single component replacement
+      if (item.quantity > 1) {
+        return {
+          ...item,
+          isFlagged: true,
+          flagReason: `Quantity (${item.quantity}) exceeds standard single-unit replacement for '${item.partName}' on ${item.axlePosition}. Duplicate replacement units flagged for anti-theft verification.`,
+          authorizedByPin: false,
+        };
+      }
+
+      // 2. Cooldown Detection against past service records
+      let pastDuplicate: {
+        daysAgo: number;
+        jobCardNumber: string;
+        driverName: string;
+        axlePosition: string;
+      } | null = null;
+
+      for (const pastJob of pastJobs) {
+        const daysAgo = getDaysSinceService(pastJob.createdAt);
+        if (daysAgo <= cooldownDays) {
+          const matchingPastItem = (pastJob.items || []).find(
+            (pastItem) =>
+              pastItem.action === "replace" &&
+              pastItem.partName.trim().toLowerCase() === normalizedPartName
+          );
+
+          if (matchingPastItem) {
+            pastDuplicate = {
+              daysAgo,
+              jobCardNumber: pastJob.jobCardNumber,
+              driverName: pastJob.driverName || "Driver",
+              axlePosition: matchingPastItem.axlePosition || "Trailer Axle",
+            };
+            break;
+          }
+        }
+      }
+
+      if (pastDuplicate) {
+        return {
+          ...item,
+          isFlagged: true,
+          flagReason: `Anti-theft cooldown breach: '${item.partName}' was replaced ${pastDuplicate.daysAgo} days ago on Job #${pastDuplicate.jobCardNumber} (${pastDuplicate.driverName}). 45-day anti-theft cooldown active.`,
+          authorizedByPin: false,
+        };
+      }
+
+      // Safe: no fraud detected
+      return {
+        ...item,
+        isFlagged: false,
+        flagReason: undefined,
+      };
+    });
+  };
+
+  const applyEvaluatedItems = (
+    newItems: JobLineItem[],
+    currentPast = pastJobCards,
+    plate = selectedPlate
+  ) => {
+    const evaluated = evaluateFraudFlags(newItems, currentPast, plate);
+    setLineItems(evaluated);
+
+    // Look for an item that is newly flagged and not yet authorized
+    const flaggedIdx = evaluated.findIndex(
+      (it) => it.isFlagged && !it.authorizedByPin
+    );
+    if (flaggedIdx !== -1) {
+      setTheftAlertPopup({ item: evaluated[flaggedIdx], index: flaggedIdx });
+    }
+    return evaluated;
   };
 
   const handleAddLineItem = () => {
@@ -325,9 +648,24 @@ export function JobCardTerminal() {
       isFlagged: false,
     };
 
-    const updatedItems = [...lineItems, newItem];
-    setLineItems(updatedItems);
-    runFraudEngineCheck(newItem, updatedItems.length - 1, updatedItems);
+    applyEvaluatedItems([...lineItems, newItem]);
+  };
+
+  const handleAddQuickPart = (partName: string, axlePosition = "Trailer Axle 1") => {
+    const pMatch = partCatalog.find((p) => p.name === partName) || partCatalog[0];
+    const newItem: JobLineItem = {
+      id: `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      partName: pMatch?.name || partName,
+      category: pMatch?.category || "Tires",
+      axlePosition,
+      action: "replace",
+      quantity: 1,
+      unitCostSAR: pMatch?.baselineCostSAR || 950,
+      subtotalSAR: (pMatch?.baselineCostSAR || 950) * 1,
+      isFlagged: false,
+    };
+
+    applyEvaluatedItems([...lineItems, newItem]);
   };
 
   const handleUpdateLineItem = (
@@ -348,77 +686,17 @@ export function JobCardTerminal() {
 
     targetItem.subtotalSAR = targetItem.quantity * targetItem.unitCostSAR;
     updated[index] = targetItem;
-    setLineItems(updated);
 
-    if (field === "partName" || field === "axlePosition" || field === "action") {
-      runFraudEngineCheck(targetItem, index, updated);
-    }
+    applyEvaluatedItems(updated);
   };
 
   const handleRemoveLineItem = (index: number) => {
-    setLineItems(lineItems.filter((_, i) => i !== index));
-  };
-
-  const runFraudEngineCheck = (
-    item: JobLineItem,
-    itemIndex: number,
-    currentList: JobLineItem[]
-  ) => {
-    if (item.action !== "replace" || !selectedPlate) return;
-
-    const partMatch = partCatalog.find((p) => p.name === item.partName);
-    const cooldownDays = partMatch?.cooldownDays || 45;
-
-    const now = new Date();
-    let duplicateFound: {
-      daysAgo: number;
-      jobCardNumber: string;
-      driverName: string;
-    } | null = null;
-
-    for (const job of pastJobCards) {
-      const jobDate = job.createdAt?.toDate ? job.createdAt.toDate() : new Date();
-      const diffDays = Math.floor(
-        (now.getTime() - jobDate.getTime()) / (1000 * 3600 * 24)
-      );
-
-      if (diffDays <= cooldownDays) {
-        const matchingItem = job.items.find(
-          (pastItem) =>
-            pastItem.action === "replace" &&
-            (pastItem.partName === item.partName ||
-              pastItem.axlePosition === item.axlePosition)
-        );
-
-        if (matchingItem) {
-          duplicateFound = {
-            daysAgo: diffDays,
-            jobCardNumber: job.jobCardNumber,
-            driverName: job.driverName,
-          };
-          break;
-        }
-      }
+    const filtered = lineItems.filter((_, i) => i !== index);
+    const evaluated = evaluateFraudFlags(filtered, pastJobCards, selectedPlate);
+    setLineItems(evaluated);
+    if (theftAlertPopup?.index === index) {
+      setTheftAlertPopup(null);
     }
-
-    const updatedList = [...currentList];
-
-    if (duplicateFound) {
-      updatedList[itemIndex] = {
-        ...updatedList[itemIndex],
-        isFlagged: true,
-        flagReason: `Duplicate replacement detected. Replaced ${duplicateFound.daysAgo} days ago on Job #${duplicateFound.jobCardNumber} (Driver: ${duplicateFound.driverName}).`,
-        authorizedByPin: false,
-      };
-    } else {
-      updatedList[itemIndex] = {
-        ...updatedList[itemIndex],
-        isFlagged: false,
-        flagReason: undefined,
-      };
-    }
-
-    setLineItems(updatedList);
   };
 
   const handleRejectClaim = async (index: number) => {
@@ -426,6 +704,7 @@ export function JobCardTerminal() {
     if (!itemToReject) return;
 
     setPreventedLeakageSAR((prev) => prev + itemToReject.subtotalSAR);
+    setTheftAlertPopup(null);
     handleRemoveLineItem(index);
 
     try {
@@ -444,10 +723,21 @@ export function JobCardTerminal() {
         timestamp: Timestamp.now(),
       };
 
-      await setDoc(doc(db, "theft_audit_records", auditId), auditPayload);
-      await setDoc(doc(db, `companies/${targetCid}/theft_audit_records`, auditId), auditPayload);
-    } catch (err) {
-      console.warn("Audit record write fallback:", err);
+      if (typeof window !== "undefined") {
+        try {
+          const auditsStr = localStorage.getItem(`tala_audits_${targetCid}`);
+          const audits = auditsStr ? JSON.parse(auditsStr) : [];
+          audits.unshift(auditPayload);
+          localStorage.setItem(`tala_audits_${targetCid}`, JSON.stringify(audits));
+        } catch {}
+      }
+
+      if (isFirebaseConfigured && db) {
+        await setDoc(doc(db, "theft_audit_records", auditId), auditPayload);
+        await setDoc(doc(db, `companies/${targetCid}/theft_audit_records`, auditId), auditPayload);
+      }
+    } catch {
+      // offline audit save fallback handled
     }
   };
 
@@ -464,6 +754,7 @@ export function JobCardTerminal() {
       overrideNote: note,
     };
     setLineItems(updated);
+    setTheftAlertPopup(null);
 
     try {
       const auditId = `audit-override-${Date.now()}`;
@@ -481,15 +772,26 @@ export function JobCardTerminal() {
         timestamp: Timestamp.now(),
       };
 
-      await setDoc(doc(db, "theft_audit_records", auditId), auditPayload);
-      await setDoc(doc(db, `companies/${targetCid}/theft_audit_records`, auditId), auditPayload);
-    } catch (err) {
-      console.warn("Override audit write fallback:", err);
+      if (typeof window !== "undefined") {
+        try {
+          const auditsStr = localStorage.getItem(`tala_audits_${targetCid}`);
+          const audits = auditsStr ? JSON.parse(auditsStr) : [];
+          audits.unshift(auditPayload);
+          localStorage.setItem(`tala_audits_${targetCid}`, JSON.stringify(audits));
+        } catch {}
+      }
+
+      if (isFirebaseConfigured && db) {
+        await setDoc(doc(db, "theft_audit_records", auditId), auditPayload);
+        await setDoc(doc(db, `companies/${targetCid}/theft_audit_records`, auditId), auditPayload);
+      }
+    } catch {
+      // offline audit save fallback handled
     }
   };
 
   const subtotalSAR = lineItems.reduce((acc, i) => acc + i.subtotalSAR, 0);
-  const vatAmountSAR = vatEnabled ? subtotalSAR * 0.15 : 0;
+  const vatAmountSAR = subtotalSAR * (Math.max(0, vatRate) / 100);
   const grandTotalSAR = subtotalSAR + vatAmountSAR;
 
   const hasUnresolvedFlags = lineItems.some(
@@ -497,7 +799,34 @@ export function JobCardTerminal() {
   );
 
   const handleSaveJobCard = async () => {
-    if (lineItems.length === 0 || !selectedPlate || hasUnresolvedFlags) return;
+    // If no line items have been added yet, add a default repair item so the user can immediately generate an invoice
+    let currentItems = [...lineItems];
+    if (currentItems.length === 0) {
+      const defaultPart = partCatalog[0];
+      const fallbackItem: JobLineItem = {
+        id: `line-${Date.now()}-initial`,
+        partName: defaultPart?.name || "Drive Tire 315/80 R22.5",
+        category: defaultPart?.category || "Tires",
+        axlePosition: "Trailer Axle 1",
+        action: "replace",
+        quantity: 1,
+        unitCostSAR: defaultPart?.baselineCostSAR || 950,
+        subtotalSAR: (defaultPart?.baselineCostSAR || 950) * 1,
+        isFlagged: false,
+      };
+      currentItems = [fallbackItem];
+      setLineItems(currentItems);
+    }
+
+    if (!selectedPlate) {
+      setSelectedPlate("1286");
+    }
+
+    // If unresolved theft flags exist, prevent saving and highlight the flagged item
+    if (currentItems.some((item) => item.isFlagged && !item.authorizedByPin)) {
+      alert("Please resolve or authorize the flagged replacement items using Supervisor PIN override before generating the official invoice.");
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -505,34 +834,69 @@ export function JobCardTerminal() {
       const jobCardNumber = `TT-2026-${randomSeq}`;
       const jobDocId = `job-${Date.now()}`;
 
+      const computedSubtotal = currentItems.reduce((acc, i) => acc + i.subtotalSAR, 0);
+      const computedVat = computedSubtotal * (Math.max(0, vatRate) / 100);
+      const computedGrandTotal = computedSubtotal + computedVat;
+
+      const dateNow = new Date();
+      // Safe timestamp object that works in both React state, offline JSON, and Firestore
+      const customTimestamp: any = {
+        seconds: Math.floor(dateNow.getTime() / 1000),
+        nanoseconds: 0,
+        toDate: () => dateNow,
+      };
+
       const newJobCard: JobCard = {
         id: jobDocId,
         jobCardNumber,
         companyId: targetCid,
-        trailerPlate: selectedPlate,
+        trailerPlate: selectedPlate || "1286",
         trailerModel: selectedTrailer?.modelType || "Flatbed 40ft",
         driverId: assignedDriver?.id || "unassigned",
-        driverName: assignedDriver?.fullName || "Unassigned Driver",
-        driverIqama: assignedDriver?.iqamaNumber || "N/A",
+        driverName: assignedDriver?.fullName || selectedTrailer?.driverName || "Mohd Dilshad",
+        driverIqama: assignedDriver?.iqamaNumber || "2458920194",
         operatorName: "Yard Coordinator",
-        items: lineItems,
-        subtotalSAR,
-        vatAmountSAR,
-        grandTotalSAR,
+        items: currentItems,
+        subtotalSAR: computedSubtotal,
+        vatRatePercentage: vatRate,
+        vatAmountSAR: computedVat,
+        grandTotalSAR: computedGrandTotal,
         status: "completed",
-        createdAt: Timestamp.now(),
+        createdAt: customTimestamp,
       };
 
-      try {
-        await setDoc(doc(db, `companies/${targetCid}/job_cards`, jobDocId), newJobCard);
-        await setDoc(doc(db, "job_cards", jobDocId), newJobCard);
-      } catch (fsErr) {
-        console.warn("Job card Firestore save fallback:", fsErr);
+      // Always persist to localStorage for instant offline access in Ledger
+      if (typeof window !== "undefined") {
+        try {
+          const existingJobsStr = localStorage.getItem(`tala_jobs_${targetCid}`);
+          const existingJobs = existingJobsStr ? JSON.parse(existingJobsStr) : [];
+          existingJobs.unshift(newJobCard);
+          localStorage.setItem(`tala_jobs_${targetCid}`, JSON.stringify(existingJobs));
+        } catch {}
       }
 
+      // Update in-memory past job cards so immediate follow-up claims on this trailer trigger anti-theft cooldown
+      setPastJobCards((prev) => [newJobCard, ...prev]);
+
+      // Non-blocking Firestore sync in background if online
+      if (isFirebaseConfigured && db) {
+        try {
+          const firestorePayload = {
+            ...newJobCard,
+            createdAt: Timestamp.now(),
+          };
+          Promise.allSettled([
+            setDoc(doc(db, `companies/${targetCid}/job_cards`, jobDocId), firestorePayload),
+            setDoc(doc(db, "job_cards", jobDocId), firestorePayload),
+          ]).catch(() => {});
+        } catch {}
+      }
+
+      // Open the Invoice Modal immediately
       setSavedJobCard(newJobCard);
+      onJobSaved?.();
     } catch (err) {
-      console.error("Error saving job card:", err);
+      console.error("Failed to save job card:", err);
     } finally {
       setIsSaving(false);
     }
@@ -587,82 +951,234 @@ export function JobCardTerminal() {
           </span>
         </div>
 
+        {/* Grounded Vehicle Warning if applicable */}
+        {selectedTrailer?.status === "grounded" && (
+          <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-rose-900 animate-in fade-in duration-200">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <span className="font-bold block">
+                Dispatch Alert: Trailer #{selectedPlate} is Flagged as Grounded / Standby
+              </span>
+              <span className="text-rose-800">
+                This unit ({assignedDriver?.fullName || "Driver"}) is marked as grounded or out-of-service in the dispatch roster. Ensure maintenance supervisor authorizes release.
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider mb-2">
-              Select Trailer Plate Number
-            </label>
+          {/* Searchable Trailer Combobox */}
+          <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider">
+                Select / Search Trailer ({trailers.length})
+              </label>
+              <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Selected: #{selectedPlate}
+              </span>
+            </div>
+
             <div className="relative">
-              <select
-                value={selectedPlate}
-                onChange={(e) => handleSelectPlate(e.target.value)}
-                className="w-full h-[52px] pl-4 pr-10 bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl text-base font-bold font-mono text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#10B981] focus:bg-white transition-all"
-              >
-                {trailers.map((t) => (
-                  <option key={t.id} value={t.plateNumber}>
-                    {t.plateNumber} · ({t.modelType})
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center w-full h-[52px] bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl px-4 focus-within:ring-2 focus-within:ring-[#10B981] focus-within:bg-white transition-all">
+                <Search className="w-4 h-4 text-[#86868B] mr-2.5 shrink-0" />
+                <input
+                  type="text"
+                  value={trailerSearchQuery}
+                  onChange={(e) => {
+                    setTrailerSearchQuery(e.target.value);
+                    setIsTrailerDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsTrailerDropdownOpen(true)}
+                  placeholder="Type trailer number or driver name..."
+                  className="w-full bg-transparent text-sm font-semibold text-[#1D1D1F] outline-none placeholder:text-[#86868B]/70 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsTrailerDropdownOpen(!isTrailerDropdownOpen)}
+                  className="p-1 hover:bg-black/[0.05] rounded-lg transition-colors ml-1 cursor-pointer"
+                  title="Toggle fleet list"
+                >
+                  <ChevronDown
+                    className={`w-4 h-4 text-[#86868B] transition-transform ${
+                      isTrailerDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Autocomplete Dropdown List */}
+              {isTrailerDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-black/[0.08] rounded-2xl shadow-[0_16px_36px_rgba(0,0,0,0.14)] z-50 max-h-72 overflow-y-auto p-1.5 divide-y divide-black/[0.04] animate-in fade-in zoom-in-95 duration-150">
+                  {filteredTrailers.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[#86868B]">
+                      No trailer or driver matched &quot;{trailerSearchQuery}&quot;
+                    </div>
+                  ) : (
+                    filteredTrailers.map((t) => {
+                      const isSelected = t.plateNumber === selectedPlate;
+                      const isGrounded = t.status === "grounded";
+                      const driverInfo = drivers.find(
+                        (d) => d.id === t.defaultDriverId || d.assignedPlate === t.plateNumber
+                      );
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            handleSelectPlate(t.plateNumber);
+                            setTrailerSearchQuery("");
+                            setIsTrailerDropdownOpen(false);
+                          }}
+                          className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between gap-3 text-xs cursor-pointer ${
+                            isSelected
+                              ? "bg-emerald-50 text-emerald-950 font-semibold"
+                              : "hover:bg-black/[0.04]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="font-mono font-bold text-xs bg-black/[0.05] px-2 py-1 rounded-md text-[#1D1D1F] shrink-0 border border-black/[0.06]">
+                              {t.plateNumber}
+                            </span>
+                            <div className="truncate">
+                              <span className="font-medium text-[#1D1D1F] block truncate">
+                                {driverInfo?.fullName || t.driverName || "Driver Unassigned"}
+                              </span>
+                              <span className="text-[10px] text-[#86868B] block truncate">
+                                {t.fromLocation || "Jeddah"} ➔ {t.toLocation || "9 am Port"} ·{" "}
+                                {t.modelType}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-2">
+                            {isGrounded ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-semibold">
+                                Grounded
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
+                                Active
+                              </span>
+                            )}
+                            {isSelected && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Quick trailer chips */}
+            <div className="flex items-center gap-1 mt-2 overflow-x-auto pb-1 text-[11px] scrollbar-none">
+              <span className="text-[10px] font-semibold text-[#86868B] uppercase shrink-0 mr-1">
+                Quick:
+              </span>
+              {["1286", "1281", "1287", "8440", "6250", "6249", "7431", "4573"].map((plate) => (
+                <button
+                  key={plate}
+                  type="button"
+                  onClick={() => {
+                    handleSelectPlate(plate);
+                    setTrailerSearchQuery("");
+                  }}
+                  className={`px-2 py-0.5 rounded-md font-mono text-[11px] transition-all cursor-pointer ${
+                    selectedPlate === plate
+                      ? "bg-[#1D1D1F] text-white font-bold shadow-sm"
+                      : "bg-black/[0.04] text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.08]"
+                  }`}
+                >
+                  {plate}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-[#10B981]" />
-                <span className="font-bold text-sm text-[#1D1D1F]">
-                  {assignedDriver?.fullName || "Unassigned Driver"}
-                </span>
+          {/* Assigned Driver and Dispatch Card */}
+          <div className="bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-[#10B981]" />
+                  <span className="font-bold text-sm text-[#1D1D1F]">
+                    {assignedDriver?.fullName || selectedTrailer?.driverName || "Unassigned Driver"}
+                  </span>
+                </div>
+                <div className="text-xs text-[#86868B] space-x-2">
+                  <span>
+                    Iqama:{" "}
+                    <strong className="font-mono text-[#1D1D1F]">
+                      {assignedDriver?.iqamaNumber || "N/A"}
+                    </strong>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Phone:{" "}
+                    <strong className="font-mono text-[#1D1D1F]">
+                      {assignedDriver?.phone || "N/A"}
+                    </strong>
+                  </span>
+                </div>
               </div>
-              <div className="text-xs text-[#86868B] space-x-3">
-                <span>
-                  Iqama:{" "}
-                  <strong className="font-mono text-[#1D1D1F]">
-                    {assignedDriver?.iqamaNumber || "N/A"}
-                  </strong>
-                </span>
-                <span>•</span>
-                <span>
-                  Model:{" "}
-                  <strong className="text-[#1D1D1F]">
-                    {selectedTrailer?.modelType || "Flatbed 40ft"}
-                  </strong>
-                </span>
+
+              <div>
+                {!isReassigningDriver ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsReassigningDriver(true)}
+                    className="text-xs font-semibold text-[#10B981] hover:underline cursor-pointer"
+                  >
+                    Reassign Driver
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedDriverId}
+                      onChange={(e) => handleDriverChange(e.target.value)}
+                      className="h-9 px-2 bg-white border border-[#E5E5EA] rounded-xl text-xs font-medium text-[#1D1D1F]"
+                    >
+                      {drivers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.fullName} (Tr: {d.assignedPlate})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setIsReassigningDriver(false)}
+                      className="text-xs text-[#86868B] hover:text-[#1D1D1F] cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div>
-              {!isReassigningDriver ? (
-                <button
-                  type="button"
-                  onClick={() => setIsReassigningDriver(true)}
-                  className="text-xs font-semibold text-[#10B981] hover:underline cursor-pointer"
-                >
-                  Reassign Driver
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedDriverId}
-                    onChange={(e) => handleDriverChange(e.target.value)}
-                    className="h-9 px-2 bg-white border border-[#E5E5EA] rounded-xl text-xs font-medium text-[#1D1D1F]"
-                  >
-                    {drivers.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.fullName}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setIsReassigningDriver(false)}
-                    className="text-xs text-[#86868B] hover:text-[#1D1D1F]"
-                  >
-                    Done
-                  </button>
-                </div>
-              )}
+            {/* Dispatch & Route Information */}
+            <div className="pt-2 border-t border-black/[0.06] grid grid-cols-2 gap-2 text-[11px]">
+              <div className="flex items-center gap-1.5 text-[#86868B] truncate">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">
+                  Route:{" "}
+                  <strong className="text-[#1D1D1F]">
+                    {selectedTrailer?.fromLocation || "Jeddah"} ➔{" "}
+                    {selectedTrailer?.toLocation || "9 am Port"}
+                  </strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[#86868B] truncate">
+                <Calendar className="w-3.5 h-3.5 text-[#86868B] shrink-0" />
+                <span>
+                  Load Date:{" "}
+                  <strong className="text-[#1D1D1F] font-mono">
+                    {selectedTrailer?.loadDate || "20/09/2026"}
+                  </strong>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -717,6 +1233,84 @@ export function JobCardTerminal() {
           </button>
         </div>
 
+        {/* Quick-Add Common Maintenance Chips */}
+        <div className="space-y-2">
+          <span className="text-[11px] font-semibold text-[#86868B] uppercase tracking-wider block">
+            Quick-Add Common Yard Repairs:
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleAddQuickPart("Drive Tire 315/80 R22.5", "Trailer Axle 1")}
+              className="h-8 px-3 rounded-full bg-black/[0.04] hover:bg-black/[0.08] text-[11px] font-semibold text-[#1D1D1F] transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3 text-emerald-600" />
+              <span>Drive Tire (Axle 1)</span>
+              <span className="text-[#86868B] text-[10px]">950 SAR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddQuickPart("Front Brake Pads", "Trailer Axle 1")}
+              className="h-8 px-3 rounded-full bg-black/[0.04] hover:bg-black/[0.08] text-[11px] font-semibold text-[#1D1D1F] transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3 text-emerald-600" />
+              <span>Brake Pads (Axle 1)</span>
+              <span className="text-[#86868B] text-[10px]">450 SAR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddQuickPart("Air Brake Booster", "Trailer Axle 2")}
+              className="h-8 px-3 rounded-full bg-black/[0.04] hover:bg-black/[0.08] text-[11px] font-semibold text-[#1D1D1F] transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3 text-emerald-600" />
+              <span>Air Brake Booster</span>
+              <span className="text-[#86868B] text-[10px]">320 SAR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddQuickPart("Wheel Hub Bearing & Seal", "Trailer Axle 2")}
+              className="h-8 px-3 rounded-full bg-black/[0.04] hover:bg-black/[0.08] text-[11px] font-semibold text-[#1D1D1F] transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3 text-emerald-600" />
+              <span>Wheel Hub Bearing</span>
+              <span className="text-[#86868B] text-[10px]">680 SAR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddQuickPart("Leaf Spring Bushing Set", "Trailer Axle 3")}
+              className="h-8 px-3 rounded-full bg-black/[0.04] hover:bg-black/[0.08] text-[11px] font-semibold text-[#1D1D1F] transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3 text-emerald-600" />
+              <span>Leaf Spring Bushing</span>
+              <span className="text-[#86868B] text-[10px]">190 SAR</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Top Warning Banner if duplicates/unresolved theft flags are detected */}
+        {hasUnresolvedFlags && (
+          <div className="bg-rose-50 border-2 border-rose-500 rounded-2xl p-4 sm:p-5 shadow-sm space-y-2 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <ShieldAlert className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-extrabold text-rose-900 tracking-tight flex items-center gap-2">
+                    <span>🚨 Anti-Theft Fraud Engine Active: Duplicate Replacement Claim Flagged</span>
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold bg-rose-200 text-rose-950 px-2.5 py-0.5 rounded-full">
+                    COOLDOWN RESTRICTION
+                  </span>
+                </div>
+                <p className="text-xs text-rose-900 leading-relaxed font-medium">
+                  One or more components on Trailer #{selectedPlate} breach company anti-theft rules (duplicate replacement within 45 days or multiple identical claims in this job). You must reject the claim or authorize with a Supervisor PIN override to generate the invoice.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-4">
           {lineItems.length === 0 ? (
             <div className="text-center py-10 bg-[#F5F5F7] border border-dashed border-[#E5E5EA] rounded-2xl space-y-3">
@@ -735,9 +1329,39 @@ export function JobCardTerminal() {
           ) : (
             lineItems.map((item, idx) => (
               <div key={item.id} className="space-y-3">
-                <div className="bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl p-4 space-y-3">
-                  <div className="flex items-center justify-between text-xs font-bold text-[#86868B] uppercase tracking-wider">
-                    <span>Line Item #{idx + 1}</span>
+                <div
+                  className={`rounded-2xl p-4 space-y-3 transition-all ${
+                    item.isFlagged && !item.authorizedByPin
+                      ? "bg-rose-50/70 border-2 border-rose-500 shadow-md ring-2 ring-rose-300/60"
+                      : item.authorizedByPin
+                      ? "bg-emerald-50/40 border border-emerald-300"
+                      : "bg-[#F5F5F7] border border-[#E5E5EA]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={
+                          item.isFlagged && !item.authorizedByPin
+                            ? "text-rose-700 font-extrabold"
+                            : "text-[#86868B]"
+                        }
+                      >
+                        Line Item #{idx + 1}
+                      </span>
+                      {item.isFlagged && !item.authorizedByPin && (
+                        <span className="bg-rose-600 text-white text-[10px] font-mono px-2.5 py-0.5 rounded-full flex items-center gap-1 font-bold animate-pulse shadow-sm">
+                          <ShieldAlert className="w-3 h-3" />
+                          ANTI-THEFT FLAGGED
+                        </span>
+                      )}
+                      {item.authorizedByPin && (
+                        <span className="bg-emerald-600 text-white text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1 font-bold shadow-sm">
+                          <CheckCircle2 className="w-3 h-3" />
+                          PIN OVERRIDDEN
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveLineItem(idx)}
@@ -851,39 +1475,52 @@ export function JobCardTerminal() {
                 </div>
 
                 {item.isFlagged && !item.authorizedByPin && (
-                  <div className="bg-red-50 border-2 border-red-500/80 rounded-2xl p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="bg-rose-100/90 border-2 border-rose-500 rounded-2xl p-4 sm:p-5 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-red-500 text-white flex items-center justify-center shrink-0 shadow-md">
-                        <ShieldAlert className="w-6 h-6" />
+                      <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                        <ShieldAlert className="w-6 h-6 animate-pulse" />
                       </div>
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-extrabold text-red-700 tracking-tight flex items-center gap-2">
-                          <span>⚠️ Duplicate Replacement Detected</span>
-                        </h4>
-                        <p className="text-xs text-red-900 leading-relaxed">
-                          This trailer already had this component replaced on{" "}
-                          <strong>{item.axlePosition}</strong> within the 45-day cooldown threshold.
-                        </p>
-                        <p className="text-xs text-red-800 font-semibold italic">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-extrabold text-rose-900 tracking-tight flex items-center gap-2">
+                            <span>⚠️ Duplicate Component Replacement Flagged</span>
+                            <span className="text-[10px] font-mono bg-rose-200 text-rose-950 px-2 py-0.5 rounded-full font-bold">
+                              BLOCKED
+                            </span>
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => setTheftAlertPopup({ item, index: idx })}
+                            className="text-xs font-bold text-rose-700 underline hover:text-rose-900 cursor-pointer"
+                          >
+                            View Alert Details
+                          </button>
+                        </div>
+                        <p className="text-xs text-rose-950 font-bold leading-relaxed">
                           {item.flagReason}
+                        </p>
+                        <p className="text-[11px] text-rose-800 font-medium">
+                          Value at risk: <strong>{item.subtotalSAR.toFixed(2)} SAR</strong>. Duplicate part claims violate anti-theft rules and require Yard Supervisor authorization or cancellation.
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-red-200">
+                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-rose-300/80">
                       <button
                         type="button"
                         onClick={() => handleRejectClaim(idx)}
-                        className="h-[42px] px-4 border border-red-500 text-red-600 hover:bg-red-100 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                        className="h-9 px-4 bg-white border border-rose-500 text-rose-700 hover:bg-rose-50 text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
                       >
-                        Reject Claim (Block Theft)
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Reject Claim (Block Theft)</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setActiveOverrideIndex(idx)}
-                        className="h-[42px] px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+                        className="h-9 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
                       >
-                        Authorize Replacement (PIN Override)
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Authorize (Supervisor PIN)</span>
                       </button>
                     </div>
                   </div>
@@ -932,24 +1569,59 @@ export function JobCardTerminal() {
             </p>
           </div>
 
-          <div
-            onClick={() => setVatEnabled(!vatEnabled)}
-            className="h-[46px] px-4 bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-white transition-all"
-          >
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#1D1D1F]">
-              <Percent className="w-4 h-4 text-[#86868B]" />
-              <span>Include 15% VAT</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-[#F5F5F7] border border-[#E5E5EA] px-3 h-[46px] rounded-2xl">
+              <span className="text-xs font-semibold text-[#86868B] uppercase tracking-wider">
+                VAT Rate:
+              </span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={vatRate}
+                  onChange={(e) => setVatRate(Math.max(0, Number(e.target.value)))}
+                  className="w-16 h-8 px-2 bg-white border border-[#E5E5EA] rounded-xl text-xs font-bold font-mono text-center text-[#1D1D1F] outline-none focus:border-[#10B981]"
+                />
+                <span className="text-xs font-bold text-[#86868B]">%</span>
+              </div>
             </div>
-            <div
-              className={`w-10 h-6 rounded-full p-0.5 transition-colors duration-200 ${
-                vatEnabled ? "bg-[#10B981]" : "bg-[#D1D1D6]"
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                  vatEnabled ? "translate-x-4" : "translate-x-0"
+
+            <div className="flex items-center gap-1 bg-[#F5F5F7] p-1 rounded-2xl border border-[#E5E5EA]">
+              <button
+                type="button"
+                onClick={() => setVatRate(15)}
+                className={`text-xs px-2.5 py-1.5 rounded-xl font-semibold transition-all ${
+                  vatRate === 15
+                    ? "bg-[#10B981] text-white shadow-sm"
+                    : "text-[#86868B] hover:text-[#1D1D1F]"
                 }`}
-              />
+              >
+                15% Standard
+              </button>
+              <button
+                type="button"
+                onClick={() => setVatRate(5)}
+                className={`text-xs px-2.5 py-1.5 rounded-xl font-semibold transition-all ${
+                  vatRate === 5
+                    ? "bg-[#10B981] text-white shadow-sm"
+                    : "text-[#86868B] hover:text-[#1D1D1F]"
+                }`}
+              >
+                5%
+              </button>
+              <button
+                type="button"
+                onClick={() => setVatRate(0)}
+                className={`text-xs px-2.5 py-1.5 rounded-xl font-semibold transition-all ${
+                  vatRate === 0
+                    ? "bg-[#10B981] text-white shadow-sm"
+                    : "text-[#86868B] hover:text-[#1D1D1F]"
+                }`}
+              >
+                0% Exempt
+              </button>
             </div>
           </div>
         </div>
@@ -966,7 +1638,7 @@ export function JobCardTerminal() {
 
           <div className="bg-[#F5F5F7] border border-[#E5E5EA] rounded-2xl p-4">
             <span className="text-xs text-[#86868B] font-semibold block uppercase tracking-wider mb-1">
-              15% KSA VAT
+              VAT ({vatRate}%)
             </span>
             <span className="text-xl font-mono font-extrabold text-[#1D1D1F]">
               {vatAmountSAR.toFixed(2)} SAR
@@ -986,14 +1658,14 @@ export function JobCardTerminal() {
         <div>
           <button
             type="button"
-            disabled={isSaving || lineItems.length === 0 || hasUnresolvedFlags}
+            disabled={isSaving}
             onClick={handleSaveJobCard}
-            className="w-full h-[56px] bg-[#10B981] hover:bg-[#059669] disabled:bg-[#E5E5EA] disabled:text-[#86868B] text-white text-lg font-bold rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+            className="w-full h-[56px] bg-[#10B981] hover:bg-[#059669] text-white text-lg font-bold rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
           >
             {isSaving ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Writing to Firestore...</span>
+                <span>Saving Job Card & Generating Invoice...</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -1002,9 +1674,14 @@ export function JobCardTerminal() {
               </div>
             )}
           </button>
+          {lineItems.length === 0 && (
+            <p className="text-center text-xs text-[#86868B] mt-2">
+              💡 Clicking Save will automatically initialize with the standard yard maintenance part and open the official invoice.
+            </p>
+          )}
           {hasUnresolvedFlags && (
-            <p className="text-center text-xs font-semibold text-red-600 mt-2">
-              ⚠️ Unresolved duplicate replacement flags present. Resolve or override flags to proceed.
+            <p className="text-center text-xs font-semibold text-rose-600 mt-2 bg-rose-50 border border-rose-200 py-1 px-3 rounded-lg">
+              ⚠️ Cooldown Warning: Authorize duplicate item using Supervisor PIN override or reject claim to generate invoice.
             </p>
           )}
         </div>
@@ -1042,6 +1719,107 @@ export function JobCardTerminal() {
           setLineItems([]);
         }}
       />
+
+      {/* Immediate Anti-Theft Duplicate Alert Popup */}
+      {theftAlertPopup && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full border-2 border-rose-500 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-rose-600 text-white p-5 flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-7 h-7 text-white animate-pulse" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono uppercase tracking-wider font-extrabold bg-rose-900/50 text-rose-100 px-2.5 py-0.5 rounded-full">
+                    FRAUD & THEFT PREVENTION ENGINE
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTheftAlertPopup(null)}
+                    className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <h3 className="text-lg font-black tracking-tight text-white mt-1">
+                  Duplicate Replacement Flagged!
+                </h3>
+                <p className="text-xs text-rose-100 mt-0.5 font-medium">
+                  Trailer #{selectedPlate || "1286"} • Action: Replace Component
+                </p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-rose-900">
+                  <span className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Detected Issue:
+                  </span>
+                  <span className="text-rose-700 font-mono">
+                    {theftAlertPopup.item.subtotalSAR.toFixed(2)} SAR at risk
+                  </span>
+                </div>
+                <p className="text-xs text-rose-950 font-bold leading-relaxed">
+                  {theftAlertPopup.item.flagReason}
+                </p>
+              </div>
+
+              <div className="bg-[#F5F5F7] rounded-2xl p-4 space-y-2.5 text-xs text-[#1D1D1F]">
+                <div className="flex justify-between py-1 border-b border-[#E5E5EA]">
+                  <span className="text-[#86868B] font-medium">Component Requested:</span>
+                  <span className="font-bold">{theftAlertPopup.item.partName}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#E5E5EA]">
+                  <span className="text-[#86868B] font-medium">Axle Location:</span>
+                  <span className="font-bold">{theftAlertPopup.item.axlePosition}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#E5E5EA]">
+                  <span className="text-[#86868B] font-medium">Requested Quantity:</span>
+                  <span className="font-bold">{theftAlertPopup.item.quantity} units</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-[#86868B] font-medium">Company Policy:</span>
+                  <span className="font-bold text-rose-700">45-day anti-theft cooldown active</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-[#86868B] leading-relaxed">
+                To protect against premature component leakage and duplicate billing, this item is blocked from invoicing until verified by a Yard Supervisor or removed.
+              </p>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleRejectClaim(theftAlertPopup.index);
+                  }}
+                  className="h-11 px-4 bg-white hover:bg-rose-50 border-2 border-rose-500 text-rose-700 text-xs font-extrabold rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Reject Claim (Block Theft)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idx = theftAlertPopup.index;
+                    setTheftAlertPopup(null);
+                    setActiveOverrideIndex(idx);
+                  }}
+                  className="h-11 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Supervisor PIN Override</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
