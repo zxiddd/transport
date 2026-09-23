@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!localProfile) {
       const defaultProfile: CompanyProfile = {
         id: cid,
-        name: "Z Transport Management",
+        name: cid.includes("tala") || cid.includes("test") ? "Tala Transport Management" : "Z Transport Management",
         branch: "Jeddah Fleet Yard 3",
         currency: "SAR",
         vatEnabled: true,
@@ -188,7 +188,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Standalone / Local Auth fallback for seamless operation
-      const generatedCid = `cid_${cleanEmail.replace(/[^a-z0-9]/g, "").substring(0, 10)}`;
+      const generatedCid = (cleanEmail.includes("test") || cleanEmail.includes("tala"))
+        ? "tala-transport"
+        : `cid_${cleanEmail.replace(/[^a-z0-9]/g, "").substring(0, 10)}`;
       setUserEmail(cleanEmail);
       setCompanyId(generatedCid);
       setIsAuthenticated(true);

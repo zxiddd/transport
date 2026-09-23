@@ -70,7 +70,7 @@ export function FleetDirectoryView({ onSelectTrailerForJob }: FleetDirectoryView
           }
         }
       } catch {}
-      setFleetList([]);
+      setFleetList(TALA_FLEET_50);
     }
   }, [targetCid]);
 
