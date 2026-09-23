@@ -30,25 +30,11 @@ export function Wizard({ onOnboardingComplete }: WizardProps) {
   // Step 2 State
   const [fleetRows, setFleetRows] = useState<FleetRow[]>([
     {
-      plateNumber: "7842-JED",
+      plateNumber: "",
       modelType: "Flatbed 40ft",
-      driverFullName: "Ahmed Al-Ghamdi",
-      iqamaNumber: "2489102934",
-      driverPhone: "+966 50 123 4567",
-    },
-    {
-      plateNumber: "3195-JED",
-      modelType: "Curtain Sider",
-      driverFullName: "Tariq Mansoor",
-      iqamaNumber: "2341908273",
-      driverPhone: "+966 55 987 6543",
-    },
-    {
-      plateNumber: "9041-JED",
-      modelType: "Lowbed",
-      driverFullName: "Sami Al-Harbi",
-      iqamaNumber: "2501928374",
-      driverPhone: "+966 54 321 0987",
+      driverFullName: "",
+      iqamaNumber: "",
+      driverPhone: "",
     },
   ]);
 

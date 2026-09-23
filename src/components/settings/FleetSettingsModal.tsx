@@ -7,6 +7,7 @@ import {
   Lock,
   Check,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { doc, setDoc } from "firebase/firestore";
@@ -27,10 +28,22 @@ export function FleetSettingsModal({
   const targetCid = companyId || "tala-transport";
 
   const [companyName, setCompanyName] = useState(
-    companyProfile?.name || "Tala Transport"
+    companyProfile?.name || "Z Transport Management"
   );
   const [branch, setBranch] = useState(
     companyProfile?.branch || "Jeddah Fleet Yard 3"
+  );
+  const [crNumber, setCrNumber] = useState(
+    companyProfile?.crNumber || ""
+  );
+  const [vatRegistrationNumber, setVatRegistrationNumber] = useState(
+    companyProfile?.vatRegistrationNumber || ""
+  );
+  const [address, setAddress] = useState(
+    companyProfile?.address || ""
+  );
+  const [phone, setPhone] = useState(
+    companyProfile?.phone || ""
   );
   const [managerPin, setManagerPin] = useState(
     companyProfile?.managerPin || "7788"
@@ -49,8 +62,12 @@ export function FleetSettingsModal({
       const cleanVatRate = Math.max(0, Number(vatRatePercentage) || 0);
       const updatedProfile = {
         id: targetCid,
-        name: companyName.trim() || "Tala Transport",
+        name: companyName.trim() || "Z Transport Management",
         branch: branch.trim() || "Jeddah Fleet Yard 3",
+        crNumber: crNumber.trim(),
+        vatRegistrationNumber: vatRegistrationNumber.trim(),
+        address: address.trim(),
+        phone: phone.trim(),
         currency: "SAR" as const,
         vatEnabled: cleanVatRate > 0,
         vatRatePercentage: cleanVatRate,
@@ -83,6 +100,22 @@ export function FleetSettingsModal({
       // safe fallback
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleClearAllData = () => {
+    if (
+      confirm(
+        "Are you sure you want to clear all stored fleet, parts, job cards, and audit records? This action cannot be undone."
+      )
+    ) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`tala_fleet_${targetCid}`);
+        localStorage.removeItem(`tala_parts_${targetCid}`);
+        localStorage.removeItem(`tala_jobs_${targetCid}`);
+        localStorage.removeItem(`tala_audits_${targetCid}`);
+        window.location.reload();
+      }
     }
   };
 
@@ -135,8 +168,72 @@ export function FleetSettingsModal({
               type="text"
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
+              placeholder="e.g. Jeddah Fleet Yard 3"
               className="w-full h-11 px-3.5 bg-black/[0.03] border border-black/[0.08] rounded-xl text-sm font-medium text-[#1D1D1F] focus:bg-white focus:border-emerald-500 transition-all outline-none"
             />
+          </div>
+
+          {/* Optional Official Details Section */}
+          <div className="p-3.5 bg-black/[0.02] border border-black/[0.06] rounded-2xl space-y-3">
+            <span className="text-[11px] font-bold text-[#86868B] uppercase tracking-wider block">
+              Official Company &amp; Tax Print Details (Optional)
+            </span>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-[#86868B] mb-1">
+                  CR Number (Commercial Registration)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 4030182940"
+                  value={crNumber}
+                  onChange={(e) => setCrNumber(e.target.value)}
+                  className="w-full h-10 px-3 bg-white border border-black/[0.08] rounded-xl text-xs font-mono font-medium text-[#1D1D1F] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#86868B] mb-1">
+                  VAT Registration Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 310284910200003"
+                  value={vatRegistrationNumber}
+                  onChange={(e) => setVatRegistrationNumber(e.target.value)}
+                  className="w-full h-10 px-3 bg-white border border-black/[0.08] rounded-xl text-xs font-mono font-medium text-[#1D1D1F] outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-[#86868B] mb-1">
+                  Yard / Street Address
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Industrial Area Phase 2, Jeddah"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full h-10 px-3 bg-white border border-black/[0.08] rounded-xl text-xs font-medium text-[#1D1D1F] outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#86868B] mb-1">
+                  Contact Phone Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. +966 12 600 0000"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full h-10 px-3 bg-white border border-black/[0.08] rounded-xl text-xs font-mono text-[#1D1D1F] outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -229,6 +326,14 @@ export function FleetSettingsModal({
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Re-run Onboarding Setup</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleClearAllData}
+            className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1.5 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear All Data</span>
           </button>
         </div>
 

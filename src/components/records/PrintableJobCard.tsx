@@ -88,14 +88,19 @@ export function PrintableJobCard({ jobCard, onClose }: PrintableJobCardProps) {
               <div className="flex items-center gap-2 text-[#10B981]">
                 <Building2 className="w-7 h-7 text-[#10B981]" />
                 <h1 className="text-2xl font-black tracking-tight text-[#1D1D1F] uppercase">
-                  {companyProfile?.name || "Tala Transport"}
+                  {companyProfile?.name || "Z Transport Management"}
                 </h1>
               </div>
               <p className="text-xs font-semibold text-[#86868B]">
-                Fleet Maintenance Workshop & Anti-Theft Division
+                {companyProfile?.branch || "Fleet Maintenance Workshop"}
               </p>
               <p className="text-xs text-[#86868B]">
-                CR #4030182940 · VAT #310284910200003 · Jeddah Industrial City, KSA
+                {[
+                  companyProfile?.crNumber ? `CR #${companyProfile.crNumber}` : "",
+                  companyProfile?.vatRegistrationNumber ? `VAT #${companyProfile.vatRegistrationNumber}` : "",
+                  companyProfile?.address || "",
+                  companyProfile?.phone ? `Tel: ${companyProfile.phone}` : "",
+                ].filter(Boolean).join(" · ")}
               </p>
             </div>
 

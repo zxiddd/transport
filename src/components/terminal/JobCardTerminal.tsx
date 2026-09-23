@@ -13,6 +13,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
+import { syncJobCardToFirestore } from "@/lib/firestoreSync";
 import { useAuth } from "@/context/AuthContext";
 import {
   Trailer,
@@ -38,6 +39,8 @@ import {
   ChevronDown,
   AlertTriangle,
   X,
+  Printer,
+  Save,
 } from "lucide-react";
 import { PinOverrideModal } from "./PinOverrideModal";
 import { AddNewPartModal } from "./AddNewPartModal";
@@ -197,15 +200,15 @@ export function JobCardTerminal({
   const [loadingCatalog, setLoadingCatalog] = useState(false);
 
   // Card 1 State: Vehicle & Driver Selection
-  const [selectedPlate, setSelectedPlate] = useState<string>("1286");
+  const [selectedPlate, setSelectedPlate] = useState<string>("");
   const [selectedTrailer, setSelectedTrailer] = useState<Trailer | null>(
-    DEFAULT_TRAILERS[0]
+    DEFAULT_TRAILERS[0] || null
   );
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(
-    DEFAULT_DRIVERS[0]
+    DEFAULT_DRIVERS[0] || null
   );
   const [isReassigningDriver, setIsReassigningDriver] = useState(false);
-  const [selectedDriverId, setSelectedDriverId] = useState<string>("driver-1286");
+  const [selectedDriverId, setSelectedDriverId] = useState<string>("");
 
   // Search Combobox State
   const [trailerSearchQuery, setTrailerSearchQuery] = useState<string>("");
@@ -249,7 +252,7 @@ export function JobCardTerminal({
         const localFleetStr = localStorage.getItem(`tala_fleet_${targetCid}`);
         if (localFleetStr) {
           const rows = JSON.parse(localFleetStr);
-          if (Array.isArray(rows) && rows.length >= 10) {
+          if (Array.isArray(rows) && rows.length > 0) {
             fetchedTrailers = rows.map((r: any) => ({
               id: r.trailerNumber || r.plateNumber,
               companyId: targetCid,
@@ -258,9 +261,9 @@ export function JobCardTerminal({
               modelType: r.modelType || "Flatbed 40ft",
               defaultDriverId: `driver-${r.trailerNumber || r.plateNumber}`,
               driverName: r.driverName || r.driverFullName,
-              loadDate: r.loadDate || "20/09/2026",
-              fromLocation: r.fromLocation || "Jeddah",
-              toLocation: r.toLocation || "9 am Port",
+              loadDate: r.loadDate || "",
+              fromLocation: r.fromLocation || "",
+              toLocation: r.toLocation || "",
               status: r.status || "active",
               createdAt: new Date() as any,
             }));
@@ -269,13 +272,13 @@ export function JobCardTerminal({
               id: `driver-${r.trailerNumber || r.plateNumber}`,
               companyId: targetCid,
               fullName: r.driverName || r.driverFullName,
-              iqamaNumber: r.iqamaNumber || "2489100000",
-              phone: r.phone || r.driverPhone || "+966 50 000 0000",
+              iqamaNumber: r.iqamaNumber || "",
+              phone: r.phone || r.driverPhone || "",
               assignedPlate: r.trailerNumber || r.plateNumber,
               trailerNumber: r.trailerNumber || r.plateNumber,
-              loadDate: r.loadDate || "20/09/2026",
-              fromLocation: r.fromLocation || "Jeddah",
-              toLocation: r.toLocation || "9 am Port",
+              loadDate: r.loadDate || "",
+              fromLocation: r.fromLocation || "",
+              toLocation: r.toLocation || "",
               status: r.status || "active",
               createdAt: new Date() as any,
             }));
@@ -294,13 +297,6 @@ export function JobCardTerminal({
     const activeTrailers = fetchedTrailers.length > 0 ? fetchedTrailers : DEFAULT_TRAILERS;
     const activeDrivers = fetchedDrivers.length > 0 ? fetchedDrivers : DEFAULT_DRIVERS;
 
-    // Cache to localStorage if not yet written
-    if (typeof window !== "undefined" && fetchedTrailers.length === 0) {
-      try {
-        localStorage.setItem(`tala_fleet_${targetCid}`, JSON.stringify(TALA_FLEET_50));
-      } catch {}
-    }
-
     // Merge custom parts with default catalog
     const mergedPartsMap = new Map<string, PartCatalogItem>();
     INITIAL_PARTS.forEach((p) => mergedPartsMap.set(p.name.toLowerCase(), p as PartCatalogItem));
@@ -312,8 +308,10 @@ export function JobCardTerminal({
     setPartCatalog(activeParts);
     setLoadingCatalog(false);
 
-    const initialTarget = selectedTrailerNumber || activeTrailers[0]?.plateNumber || "1286";
-    handleSelectPlate(initialTarget, activeTrailers, activeDrivers);
+    const initialTarget = selectedTrailerNumber || activeTrailers[0]?.plateNumber || "";
+    if (initialTarget) {
+      handleSelectPlate(initialTarget, activeTrailers, activeDrivers);
+    }
 
     // Non-blocking parallel background sync with Firestore
     if (isFirebaseConfigured && db) {
@@ -480,14 +478,6 @@ export function JobCardTerminal({
         } catch {
           // offline fallback
         }
-      }
-
-      if (jobsList.length === 0) {
-        jobsList = getInitialPastJobsForTrailer(
-          cleanPlate,
-          targetCid,
-          driverMatch?.fullName
-        );
       }
 
       setPastJobCards(jobsList);
@@ -798,7 +788,7 @@ export function JobCardTerminal({
     (item) => item.isFlagged && !item.authorizedByPin
   );
 
-  const handleSaveJobCard = async () => {
+  const handleSaveJobCard = async (openInvoice: boolean = true) => {
     // If no line items have been added yet, add a default repair item so the user can immediately generate an invoice
     let currentItems = [...lineItems];
     if (currentItems.length === 0) {
@@ -818,8 +808,8 @@ export function JobCardTerminal({
       setLineItems(currentItems);
     }
 
-    if (!selectedPlate) {
-      setSelectedPlate("1286");
+    if (!selectedPlate && trailers.length > 0) {
+      setSelectedPlate(trailers[0].plateNumber);
     }
 
     // If unresolved theft flags exist, prevent saving and highlight the flagged item
@@ -850,12 +840,12 @@ export function JobCardTerminal({
         id: jobDocId,
         jobCardNumber,
         companyId: targetCid,
-        trailerPlate: selectedPlate || "1286",
+        trailerPlate: selectedPlate || (trailers[0]?.plateNumber || "N/A"),
         trailerModel: selectedTrailer?.modelType || "Flatbed 40ft",
         driverId: assignedDriver?.id || "unassigned",
-        driverName: assignedDriver?.fullName || selectedTrailer?.driverName || "Mohd Dilshad",
-        driverIqama: assignedDriver?.iqamaNumber || "2458920194",
-        operatorName: "Yard Coordinator",
+        driverName: assignedDriver?.fullName || selectedTrailer?.driverName || "Driver Unassigned",
+        driverIqama: assignedDriver?.iqamaNumber || "N/A",
+        operatorName: companyProfile?.name ? `${companyProfile.name} Coordinator` : "Yard Coordinator",
         items: currentItems,
         subtotalSAR: computedSubtotal,
         vatRatePercentage: vatRate,
@@ -878,23 +868,17 @@ export function JobCardTerminal({
       // Update in-memory past job cards so immediate follow-up claims on this trailer trigger anti-theft cooldown
       setPastJobCards((prev) => [newJobCard, ...prev]);
 
-      // Non-blocking Firestore sync in background if online
-      if (isFirebaseConfigured && db) {
-        try {
-          const firestorePayload = {
-            ...newJobCard,
-            createdAt: Timestamp.now(),
-          };
-          Promise.allSettled([
-            setDoc(doc(db, `companies/${targetCid}/job_cards`, jobDocId), firestorePayload),
-            setDoc(doc(db, "job_cards", jobDocId), firestorePayload),
-          ]).catch(() => {});
-        } catch {}
-      }
+      // Sync directly to Cloud Firestore
+      await syncJobCardToFirestore(newJobCard);
 
-      // Open the Invoice Modal immediately
-      setSavedJobCard(newJobCard);
       onJobSaved?.();
+
+      if (openInvoice) {
+        setSavedJobCard(newJobCard);
+      } else {
+        alert(`Job Card #${jobCardNumber} saved successfully to Ledger!`);
+        setLineItems([]);
+      }
     } catch (err) {
       console.error("Failed to save job card:", err);
     } finally {
@@ -1073,28 +1057,33 @@ export function JobCardTerminal({
             </div>
 
             {/* Quick trailer chips */}
-            <div className="flex items-center gap-1 mt-2 overflow-x-auto pb-1 text-[11px] scrollbar-none">
-              <span className="text-[10px] font-semibold text-[#86868B] uppercase shrink-0 mr-1">
-                Quick:
-              </span>
-              {["1286", "1281", "1287", "8440", "6250", "6249", "7431", "4573"].map((plate) => (
-                <button
-                  key={plate}
-                  type="button"
-                  onClick={() => {
-                    handleSelectPlate(plate);
-                    setTrailerSearchQuery("");
-                  }}
-                  className={`px-2 py-0.5 rounded-md font-mono text-[11px] transition-all cursor-pointer ${
-                    selectedPlate === plate
-                      ? "bg-[#1D1D1F] text-white font-bold shadow-sm"
-                      : "bg-black/[0.04] text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.08]"
-                  }`}
-                >
-                  {plate}
-                </button>
-              ))}
-            </div>
+            {trailers.length > 0 && (
+              <div className="flex items-center gap-1 mt-2 overflow-x-auto pb-1 text-[11px] scrollbar-none">
+                <span className="text-[10px] font-semibold text-[#86868B] uppercase shrink-0 mr-1">
+                  Quick:
+                </span>
+                {trailers.slice(0, 8).map((t) => {
+                  const plate = t.plateNumber || t.trailerNumber;
+                  return (
+                    <button
+                      key={t.id || plate}
+                      type="button"
+                      onClick={() => {
+                        handleSelectPlate(plate || "");
+                        setTrailerSearchQuery("");
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-mono text-[11px] transition-all cursor-pointer ${
+                        selectedPlate === plate
+                          ? "bg-[#1D1D1F] text-white font-bold shadow-sm"
+                          : "bg-black/[0.04] text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.08]"
+                      }`}
+                    >
+                      {plate}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Assigned Driver and Dispatch Card */}
@@ -1193,13 +1182,15 @@ export function JobCardTerminal({
               <span className="text-[#86868B]">Loading historical job cards...</span>
             ) : pastJobCards.length > 0 ? (
               <span className="text-amber-800">
-                Last serviced: <strong>14 days ago</strong> — Replaced:{" "}
+                Last serviced: <strong>{getDaysSinceService(pastJobCards[0].createdAt)} days ago</strong> — Replaced:{" "}
                 {pastJobCards[0].items.map((i) => i.partName).join(", ")} (Job #
                 {pastJobCards[0].jobCardNumber})
               </span>
             ) : (
               <span className="text-amber-800 font-medium">
-                No recorded repairs within 60 days for trailer {selectedPlate}.
+                {selectedPlate
+                  ? `No recorded service history for Trailer #${selectedPlate}.`
+                  : "Select a trailer to view service timeline history."}
               </span>
             )}
           </div>
@@ -1374,21 +1365,25 @@ export function JobCardTerminal({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                     <div className="lg:col-span-2">
                       <label className="block text-[11px] font-semibold text-[#86868B] mb-1">
-                        Select Component
+                        Component / Part Name
                       </label>
-                      <select
+                      <input
+                        type="text"
+                        list={`part-catalog-${idx}`}
                         value={item.partName}
                         onChange={(e) =>
                           handleUpdateLineItem(idx, "partName", e.target.value)
                         }
+                        placeholder="Type component name or select..."
                         className="w-full h-[46px] px-3 bg-white border border-[#E5E5EA] rounded-xl text-xs font-bold text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#10B981]"
-                      >
+                      />
+                      <datalist id={`part-catalog-${idx}`}>
                         {partCatalog.map((p) => (
                           <option key={p.id} value={p.name}>
                             {p.name} ({p.category})
                           </option>
                         ))}
-                      </select>
+                      </datalist>
                     </div>
 
                     <div className="lg:col-span-1">
@@ -1655,32 +1650,45 @@ export function JobCardTerminal({
           </div>
         </div>
 
-        <div>
-          <button
-            type="button"
-            disabled={isSaving}
-            onClick={handleSaveJobCard}
-            className="w-full h-[56px] bg-[#10B981] hover:bg-[#059669] text-white text-lg font-bold rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-          >
-            {isSaving ? (
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Saving Job Card & Generating Invoice...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-6 h-6" />
-                <span>Save Job Card & Generate Invoice</span>
-              </div>
-            )}
-          </button>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => handleSaveJobCard(false)}
+              className="w-full h-[52px] bg-white border border-[#E5E5EA] hover:bg-[#F5F5F7] text-[#1D1D1F] text-base font-bold rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+            >
+              <Save className="w-5 h-5 text-[#86868B]" />
+              <span>Save Job Card Only</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => handleSaveJobCard(true)}
+              className="w-full h-[52px] bg-[#10B981] hover:bg-[#059669] text-white text-base font-bold rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+            >
+              {isSaving ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Printer className="w-5 h-5" />
+                  <span>Save & Print Invoice</span>
+                </div>
+              )}
+            </button>
+          </div>
+
           {lineItems.length === 0 && (
-            <p className="text-center text-xs text-[#86868B] mt-2">
-              💡 Clicking Save will automatically initialize with the standard yard maintenance part and open the official invoice.
+            <p className="text-center text-xs text-[#86868B]">
+              💡 Clicking Save will automatically initialize with the standard yard maintenance part.
             </p>
           )}
           {hasUnresolvedFlags && (
-            <p className="text-center text-xs font-semibold text-rose-600 mt-2 bg-rose-50 border border-rose-200 py-1 px-3 rounded-lg">
+            <p className="text-center text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 py-1.5 px-3 rounded-xl">
               ⚠️ Cooldown Warning: Authorize duplicate item using Supervisor PIN override or reject claim to generate invoice.
             </p>
           )}

@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tala Transport · Fleet Workshop & Anti-Theft Terminal",
+  title: "Z Transport Management · Commercial Fleet SaaS",
   description:
-    "Commercial B2B fleet workshop maintenance management and anti-theft tracking platform for Tala Transport, Jeddah.",
+    "Commercial fleet workshop management, ZATCA VAT invoicing, and anti-theft parts locking platform.",
 };
 
 export default function RootLayout({

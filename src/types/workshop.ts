@@ -7,6 +7,10 @@ export interface CompanyProfile {
   currency: "SAR";
   vatEnabled: boolean;
   vatRatePercentage?: number; // e.g. 15, 5, 0, or custom rate
+  crNumber?: string; // Commercial Registration Number (Optional)
+  vatRegistrationNumber?: string; // ZATCA Tax ID Number (Optional)
+  address?: string; // Yard / Physical Address (Optional)
+  phone?: string; // Contact Phone (Optional)
   managerPin: string; // 4-digit code or hashed string
   hasCompletedOnboarding: boolean;
   createdAt: Timestamp;

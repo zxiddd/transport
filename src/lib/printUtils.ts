@@ -219,12 +219,18 @@ function fallbackWindowPrint(fullHtml: string) {
  * Generate official ZATCA tax invoice print view for a job card
  */
 export function printJobCardInvoice(jobCard: JobCard, companyProfile: CompanyProfile | null) {
-  const companyName = companyProfile?.name || "Tala Transport";
+  const companyName = companyProfile?.name || "Z Transport Management";
   const branch = companyProfile?.branch || "Jeddah Fleet Yard 3";
   const vatRate = jobCard.vatRatePercentage ?? (jobCard.vatAmountSAR > 0 ? 15 : 0);
   const formattedDate = jobCard.createdAt?.toDate
     ? jobCard.createdAt.toDate().toLocaleString("en-GB")
     : new Date().toLocaleString("en-GB");
+
+  const crInfo = companyProfile?.crNumber ? `CR #${companyProfile.crNumber}` : "";
+  const vatInfo = companyProfile?.vatRegistrationNumber ? `VAT Registration #${companyProfile.vatRegistrationNumber}` : "";
+  const addressInfo = companyProfile?.address || "Kingdom of Saudi Arabia";
+  const phoneInfo = companyProfile?.phone ? `Tel: ${companyProfile.phone}` : "";
+  const subDetailsStr = [crInfo, vatInfo, addressInfo, phoneInfo].filter(Boolean).join(" · ");
 
   const rowsHtml = jobCard.items
     .map(
@@ -249,9 +255,8 @@ export function printJobCardInvoice(jobCard: JobCard, companyProfile: CompanyPro
     <div class="print-header">
       <div>
         <h1 class="company-title">${companyName}</h1>
-        <p class="company-sub">Fleet Maintenance & Anti-Theft Terminal</p>
-        <p class="company-sub">${branch} · Kingdom of Saudi Arabia</p>
-        <p class="company-sub">CR #4030182940 · VAT Registration #310284910200003</p>
+        <p class="company-sub">${branch}</p>
+        ${subDetailsStr ? `<p class="company-sub">${subDetailsStr}</p>` : ""}
       </div>
       <div style="text-align: right;">
         <div class="badge">Official Workshop Job Card</div>

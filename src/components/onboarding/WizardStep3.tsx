@@ -28,43 +28,7 @@ const CATEGORIES: ("Tires" | "Brakes" | "Suspension" | "Fluids" | "Body" | "Othe
   "Other",
 ];
 
-export const INITIAL_PARTS: PartSeedItem[] = [
-  {
-    id: "part-1",
-    name: "Drive Tire 315/80 R22.5",
-    category: "Tires",
-    cooldownDays: 45,
-    baselineCostSAR: 950,
-  },
-  {
-    id: "part-2",
-    name: "Trailer Axle Tire",
-    category: "Tires",
-    cooldownDays: 45,
-    baselineCostSAR: 900,
-  },
-  {
-    id: "part-3",
-    name: "Brake Drums / Shoes",
-    category: "Brakes",
-    cooldownDays: 30,
-    baselineCostSAR: 380,
-  },
-  {
-    id: "part-4",
-    name: "Hub Seals",
-    category: "Suspension",
-    cooldownDays: 60,
-    baselineCostSAR: 95,
-  },
-  {
-    id: "part-5",
-    name: "Engine Oil 15W-40",
-    category: "Fluids",
-    cooldownDays: 20,
-    baselineCostSAR: 320,
-  },
-];
+export const INITIAL_PARTS: PartSeedItem[] = [];
 
 export function WizardStep3({
   parts,
